@@ -1,0 +1,5 @@
+name: MCQQBridge
+main: top.luotiany1.mcqq.MCQQBridge
+version: 2.0.0
+author: luotiany
+softDepends: [floodgate, BungeeChat]

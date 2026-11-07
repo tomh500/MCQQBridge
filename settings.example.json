@@ -1,0 +1,27 @@
+{
+  "app_id": "",
+  "app_secret": "",
+  "allowed_groups": [],
+  "group_number": "",
+  "database": "data/bindings.db",
+  "listen_host": "127.0.0.1",
+  "listen_port": 18765,
+  "service_url": "http://127.0.0.1:18765",
+  "bot_token": "",
+  "proxy_token": "",
+  "afterglow_connection": "bridge.json",
+  "rebind_cooldown_seconds": 60,
+  "chat_bridge": {
+    "servers": [],
+    "inbound_groups": [],
+    "group_aliases": {}
+  },
+  "media": {
+    "port": 0,
+    "public_base_url": ""
+  },
+  "features": {
+    "private_ai": false
+  },
+  "launcher_groups": {}
+}

@@ -1,0 +1,12 @@
+features:
+  chat: true
+group-commands: {}
+storage:
+  type: yaml # yaml, sql, mongodb
+  sql:
+    url: '' # blank = local SQLite; jdbc:mysql://host/database or jdbc:postgresql://host/database
+    username: ''
+    password: ''
+  mongodb:
+    uri: ''
+    database: mcqq

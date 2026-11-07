@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "id": "mcqq_images",
+  "version": "${version}",
+  "name": "MC QQ Images",
+  "description": "Shows QQ chat image and sticker previews, including animated GIFs.",
+  "environment": "client",
+  "entrypoints": { "client": ["top.luotiany1.mcqq.images.MCQQImages"] },
+  "depends": { "fabricloader": ">=0.19.3", "minecraft": "~26.2", "java": ">=25", "fabric-api": "*" }
+}

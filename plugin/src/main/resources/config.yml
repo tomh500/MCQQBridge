@@ -1,0 +1,25 @@
+# Enable after the service and group binding have been configured.
+enabled: false
+service-url: http://127.0.0.1:18765
+proxy-token: ''
+connect-timeout-ms: 2000
+read-timeout-ms: 3000
+recheck-seconds: 5
+denied-message: '请在服主指定的 QQ 群中 @机器人，发送 /绑定 Java 游戏名 或 /绑定 基岩 Xbox昵称'
+unavailable-message: '白名单服务暂时不可用，请稍后重新连接。'
+chat-bridge:
+  enabled: false
+  servers: []
+  # QQ official events identify members by member_openid, not their numeric QQ number.
+  # Optional manual aliases: '123456789': 'actual_member_openid'
+  qq-identities: {}
+  # Keys may be member_openid directly or a QQ number from qq-identities above.
+  # Example: '123456789': '专属头衔'
+  # Blank values mean no mapped title. Reload with proxy console: qqwl reload
+  qq-titles: {}
+
+# Set features.whitelist explicitly to override legacy enabled.
+word-filter:
+  enabled: false
+  red: []
+  yellow: []

@@ -1,0 +1,12 @@
+name: MCQQSpigot
+main: top.luotiany1.mcqq.SaidPlugin
+version: 2.0.0
+author: luotiany
+commands:
+  said:
+    description: 将聊天发送到互通子服和QQ群
+    usage: /said 文本
+    permission: mcqq.said
+permissions:
+  mcqq.said:
+    default: true
