@@ -1,4 +1,5 @@
-param([string]$BungeeJar = "$PSScriptRoot/../../core/BungeeCord.jar")
+param([string]$ServerRoot = "$PSScriptRoot/../../..", [string]$BungeeJar = "")
+if (-not $BungeeJar) { $BungeeJar = Join-Path $ServerRoot "core/BungeeCord.jar" }
 $ErrorActionPreference = 'Stop'
 $outputDir = Join-Path $PSScriptRoot 'target/classes'
 if (Test-Path -LiteralPath $outputDir) {
@@ -8,7 +9,7 @@ if (Test-Path -LiteralPath $outputDir) {
 }
 New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
 $sources = @(Get-ChildItem -LiteralPath "$PSScriptRoot/src/main/java" -Recurse -Filter '*.java' | ForEach-Object { $_.FullName })
-$chatJar = (Get-ChildItem "$PSScriptRoot/../../proxy/plugins" -Filter '*Chat*.jar' | Select-Object -First 1).FullName
+$chatJar = (Get-ChildItem (Join-Path $ServerRoot "proxy/plugins") -Filter '*Chat*.jar' | Select-Object -First 1).FullName
 & javac --release 8 -encoding UTF-8 -classpath "$BungeeJar;$chatJar" -d $outputDir @sources
 if ($LASTEXITCODE -ne 0) { throw 'javac failed' }
 Copy-Item -Path "$PSScriptRoot/src/main/resources/*" -Destination $outputDir -Force

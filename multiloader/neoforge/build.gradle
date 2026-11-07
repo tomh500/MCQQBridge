@@ -1,0 +1,12 @@
+plugins { id 'java-library'; id 'net.neoforged.moddev' version '2.0.148' }
+group = 'top.luotiany1'
+version = '1.2.0-dev'
+base { archivesName = 'mcqq-images-neoforge' }
+java.toolchain.languageVersion = JavaLanguageVersion.of(25)
+sourceSets.main.java.srcDir '../src/main/java'
+neoForge {
+    version = project.findProperty('neo_version') ?: '26.3.0.101'
+    runs { client { client() } }
+    mods { mcqq_images { sourceSet(sourceSets.main) } }
+}
+tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8'; options.compilerArgs += ['-proc:none'] }

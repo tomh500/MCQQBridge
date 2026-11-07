@@ -1,4 +1,4 @@
-param([string]$FloodgateJar = "$PSScriptRoot/../../proxy/plugins/floodgate-bungee.jar")
+param([string]$FloodgateJar = "$PSScriptRoot/../../../proxy/plugins/floodgate-bungee.jar")
 $ErrorActionPreference = 'Stop'
 $outputDir = Join-Path $PSScriptRoot 'target/classes'
 if (Test-Path -LiteralPath $outputDir) {

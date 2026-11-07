@@ -1,10 +1,10 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <groupId>top.luotiany1</groupId><artifactId>mcqq-bridge</artifactId><version>2.0.0</version>
-  <properties><maven.compiler.release>8</maven.compiler.release><project.build.sourceEncoding>UTF-8</project.build.sourceEncoding></properties>
+  <properties><mcserver.root>${project.basedir}/../../..</mcserver.root><maven.compiler.release>8</maven.compiler.release><project.build.sourceEncoding>UTF-8</project.build.sourceEncoding></properties>
   <dependencies><dependency><groupId>net.md-5</groupId><artifactId>bungeecord-api</artifactId><version>1.20-R0.2</version><scope>provided</scope></dependency>
-    <dependency><groupId>net.md-5</groupId><artifactId>bungeecord-local</artifactId><version>26.1</version><scope>system</scope><systemPath>${project.basedir}/../../core/BungeeCord.jar</systemPath></dependency>
-    <dependency><groupId>dev.aura</groupId><artifactId>bungeechat-local</artifactId><version>2.2.3.1241</version><scope>system</scope><systemPath>${project.basedir}/../../proxy/plugins/BungeeChat-2.2.3.1241.jar</systemPath></dependency>
+    <dependency><groupId>net.md-5</groupId><artifactId>bungeecord-local</artifactId><version>26.1</version><scope>system</scope><systemPath>${mcserver.root}/core/BungeeCord.jar</systemPath></dependency>
+    <dependency><groupId>dev.aura</groupId><artifactId>bungeechat-local</artifactId><version>2.2.3.1241</version><scope>system</scope><systemPath>${mcserver.root}/proxy/plugins/BungeeChat-2.2.3.1241.jar</systemPath></dependency>
   </dependencies>
   <build><plugins><plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-compiler-plugin</artifactId><version>3.13.0</version></plugin></plugins></build>
 </project>

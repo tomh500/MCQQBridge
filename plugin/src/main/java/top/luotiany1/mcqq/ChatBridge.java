@@ -116,7 +116,7 @@ public final class ChatBridge implements Listener {
             try {
                 if (qq) { qqRole.set(role); qqTitle.set(title); }
                 else saidSource.set(true);
-                if (qq && text.trim().isEmpty()) {
+                if (qq && (text.trim().isEmpty() || text.equals("[表情包：暂无图片链接]"))) {
                     if (account.get().isMuted()) return Optional.empty();
                     return Optional.of(Format.GLOBAL_CHAT.get(context));
                 }

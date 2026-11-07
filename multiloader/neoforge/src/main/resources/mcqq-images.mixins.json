@@ -1,0 +1,1 @@
+{"required":true,"minVersion":"0.8","package":"top.luotiany1.mcqq.images.mixin","compatibilityLevel":"JAVA_25","client":["ChatComponentMixin","ChatScreenMixin","MinecraftMixin"],"injectors":{"defaultRequire":1}}

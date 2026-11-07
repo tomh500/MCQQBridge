@@ -7,7 +7,7 @@ QQ 官方机器人与 Minecraft 群服互通框架。Java 包与构建 Group ID 
 - `mcqq`：Python 3.11+、官方 QQ Bot SDK、aiohttp；提供绑定、身份关联、消息队列和媒体服务。
 - `plugin`：BungeeCord 代理插件 MCQQBridge；聊天需要 BungeeChat，基岩关联需要 Floodgate。
 - `spigot`：Spigot 1.12.2+ 子服插件 MCQQSpigot；保留 `/said`，支持按群注册命令，提供异步存取接口。
-- `fabric`：可选的图片客户端；客户端能力独立安装。
+- `fabric`：可选图片客户端，[通用 Fabric 源码与构建说明](fabric/universal/README.md)；26.2、26.3 为重点支持版本，旧版为 legacy support。Forge 和 NeoForge 原生支持正在开发。
 
 首次使用复制 `settings.example.json` 为 `settings.json`，填写自己的 QQ app_id、app_secret 和两个不同的随机服务 token（各至少32字符），安装 requirements.txt 后分别运行 `python -m mcqq.service` 与 `python -m mcqq.bot`。配置路径可由 `MCQQ_SETTINGS` 指定，相对路径以配置文件目录为基准。代理的 service-url 和 proxy-token 必须匹配；远程 API 使用 HTTPS 或 SSH 隧道。不要公开凭据、数据库和签名私钥。
 
@@ -37,7 +37,7 @@ QQ 官方机器人与 Minecraft 群服互通框架。Java 包与构建 Group ID 
 
 ## 构建与升级
 
-代理运行 plugin/build.ps1；子服使用 Maven 3.9+ 执行 `mvn -f spigot/pom.xml package`，数据库驱动随子服 JAR 打包。源码构建需要工作区 core 下的 BungeeCord.jar、spigot-1.12.2.jar 和 BungeeChat JAR。输出分别为 mcqq-bridge-2.0.0.jar、mcqq-spigot-2.0.0.jar。
+代理运行 plugin/build.ps1；子服使用 Maven 3.9+ 执行 `mvn -f spigot/pom.xml package`，数据库驱动随子服 JAR 打包。源码构建需要服务器根目录 core 下的 BungeeCord.jar、spigot-1.12.2.jar 和 proxy 下的 BungeeChat JAR；Maven 可用 `-Dmcserver.root=绝对路径` 指定服务器根目录。输出分别为 mcqq-bridge-2.0.0.jar、mcqq-spigot-2.0.0.jar。
 
 升级先备份并正常停止服务器，删除旧 qq-whitelist 和 mcqq-said JAR，放入新 JAR。代理首次启动自动复制 QQWhitelist 数据目录到 MCQQBridge；旧目录保留备份。子服旧 MCQQSaid 配置需要复制到 MCQQSpigot。切勿同时加载新旧插件。保留机器人 settings.json、bridge.json、数据库和服务器上的签名密钥。
 

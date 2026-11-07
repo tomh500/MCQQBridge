@@ -9,7 +9,7 @@ import urllib.request
 import zipfile
 
 ROOT = Path(__file__).resolve().parent
-WORK = ROOT.parents[1] / "_work/mcqq-mod-build"
+WORK = ROOT.parent.parent / "mcqq-mod-build"
 CACHE = Path.home() / ".gradle/caches"
 API = "0.161.0+26.2"
 
@@ -61,15 +61,19 @@ def main():
     if classes.exists(): shutil.rmtree(classes)
     classes.mkdir(parents=True,exist_ok=True)
     sources=sorted((ROOT/"src/main/java").rglob("*.java"))
-    args=["--release","25","-proc:none","-encoding","UTF-8","-classpath",os.pathsep.join(str(p).replace("\\","/") for p in cp),"-d",str(classes).replace("\\","/")]
+    args=["--release","21","-proc:none","-encoding","UTF-8","-classpath",os.pathsep.join(str(p).replace("\\","/") for p in cp),"-d",str(classes).replace("\\","/")]
     args += [str(p).replace("\\","/") for p in sources]
     argfile=WORK/"javac.args"
     argfile.write_text("\n".join('"'+a+'"' for a in args),encoding="utf8")
     subprocess.run([javac,"@"+str(argfile)],check=True)
     probe=ROOT/"src/test/java/top/luotiany1/mcqq/images/DecoderProbe.java"
     test_classes=ROOT/"build/manual/test"; test_classes.mkdir(parents=True,exist_ok=True)
-    subprocess.run([javac,"--release","25","-encoding","UTF-8","-cp",str(classes),"-d",str(test_classes),str(probe)],check=True)
+    subprocess.run([javac,"--release","21","-encoding","UTF-8","-cp",str(classes),"-d",str(test_classes),str(probe)],check=True)
     subprocess.run([java,"-Djava.awt.headless=true","-cp",os.pathsep.join([str(classes),str(test_classes)]),"top.luotiany1.mcqq.images.DecoderProbe"],check=True)
+    layout=ROOT/"src/test/java/top/luotiany1/mcqq/images/ChatLayoutProbe.java"
+    layout_cp=os.pathsep.join([str(classes),*(str(p) for p in cp)])
+    subprocess.run([javac,"--release","21","-encoding","UTF-8","-cp",layout_cp,"-d",str(test_classes),str(layout)],check=True)
+    subprocess.run([java,"-Djava.awt.headless=true","-cp",os.pathsep.join([str(test_classes),layout_cp]),"top.luotiany1.mcqq.images.ChatLayoutProbe"],check=True)
     output=ROOT/"build/libs/mcqq-images-1.0.0+26.2.jar"; output.parent.mkdir(parents=True,exist_ok=True)
     with zipfile.ZipFile(output,"w",zipfile.ZIP_DEFLATED) as z:
         for p in classes.rglob("*.class"): z.write(p,p.relative_to(classes).as_posix())

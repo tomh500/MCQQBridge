@@ -1,0 +1,13 @@
+plugins { id 'java'; id 'net.minecraftforge.gradle' version '[7.0.29,8.0)' }
+group = 'top.luotiany1'
+version = '1.2.0-dev'
+base { archivesName = 'mcqq-images-forge' }
+java.toolchain.languageVersion = JavaLanguageVersion.of(25)
+sourceSets.main.java.srcDir '../src/main/java'
+def mcVersion = project.findProperty('minecraft_version') ?: '26.3'
+def forgeVersion = project.findProperty('forge_version') ?: '66.1.2'
+minecraft { mappings channel: 'official', version: mcVersion; runs { register('client') { } } }
+repositories { minecraft.mavenizer(it); maven fg.forgeMaven; maven fg.minecraftLibsMaven; mavenCentral() }
+dependencies { implementation minecraft.dependency("net.minecraftforge:forge:${mcVersion}-${forgeVersion}") }
+tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8'; options.compilerArgs += ['-proc:none'] }
+tasks.named('jar', Jar) { manifest { attributes 'MixinConfigs': 'mcqq-images.mixins.json' } }

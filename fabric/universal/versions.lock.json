@@ -1,0 +1,420 @@
+{
+  "1.21.4": {
+    "metadata": {
+      "id": "1.21.4",
+      "type": "release",
+      "url": "https://piston-meta.mojang.com/v1/packages/2e024c9834568a872f8c009a97b29d8d7381d00a/1.21.4.json",
+      "time": "2026-11-03T06:43:40+00:00",
+      "releaseTime": "2024-12-03T10:12:57+00:00",
+      "sha1": "2e024c9834568a872f8c009a97b29d8d7381d00a",
+      "complianceLevel": 1
+    },
+    "downloads": {
+      "client": {
+        "sha1": "a7e5a6024bfd3cd614625aa05629adf760020304",
+        "size": 28335587,
+        "url": "https://piston-data.mojang.com/v1/objects/a7e5a6024bfd3cd614625aa05629adf760020304/client.jar"
+      },
+      "client_mappings": {
+        "sha1": "0cf2a0b7f056da1a5a5dd99fc6dc752f33987150",
+        "size": 10323161,
+        "url": "https://piston-data.mojang.com/v1/objects/0cf2a0b7f056da1a5a5dd99fc6dc752f33987150/client.txt"
+      },
+      "server": {
+        "sha1": "4707d00eb834b446575d89a61a11b5d548d8c001",
+        "size": 56880250,
+        "url": "https://piston-data.mojang.com/v1/objects/4707d00eb834b446575d89a61a11b5d548d8c001/server.jar"
+      },
+      "server_mappings": {
+        "sha1": "0b1e60cc509cfb0172573ae56b436c29febbc187",
+        "size": 7753825,
+        "url": "https://piston-data.mojang.com/v1/objects/0b1e60cc509cfb0172573ae56b436c29febbc187/server.txt"
+      }
+    },
+    "fabric_api": "0.119.4+1.21.4",
+    "api_url": "https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-api/0.119.4+1.21.4/fabric-api-0.119.4+1.21.4.jar",
+    "api_sha1": "1c7871b6af04edc8b8f0dbad12606d67f6118a11"
+  },
+  "1.21.5": {
+    "metadata": {
+      "id": "1.21.5",
+      "type": "release",
+      "url": "https://piston-meta.mojang.com/v1/packages/5ca2012338100e4dbfef0d2114a5fa66959ab1e5/1.21.5.json",
+      "time": "2026-11-03T06:46:52+00:00",
+      "releaseTime": "2025-03-25T12:14:58+00:00",
+      "sha1": "5ca2012338100e4dbfef0d2114a5fa66959ab1e5",
+      "complianceLevel": 1
+    },
+    "downloads": {
+      "client": {
+        "sha1": "b88808bbb3da8d9f453694b5d8f74a3396f1a533",
+        "size": 28984409,
+        "url": "https://piston-data.mojang.com/v1/objects/b88808bbb3da8d9f453694b5d8f74a3396f1a533/client.jar"
+      },
+      "client_mappings": {
+        "sha1": "57669731d542f98646772e91a0d68628f9827a5c",
+        "size": 10670987,
+        "url": "https://piston-data.mojang.com/v1/objects/57669731d542f98646772e91a0d68628f9827a5c/client.txt"
+      },
+      "server": {
+        "sha1": "e6ec2f64e6080b9b5d9b471b291c33cc7f509733",
+        "size": 57269758,
+        "url": "https://piston-data.mojang.com/v1/objects/e6ec2f64e6080b9b5d9b471b291c33cc7f509733/server.jar"
+      },
+      "server_mappings": {
+        "sha1": "f4812c1d66d0098a94616b19c21829e591d0af3a",
+        "size": 8027211,
+        "url": "https://piston-data.mojang.com/v1/objects/f4812c1d66d0098a94616b19c21829e591d0af3a/server.txt"
+      }
+    },
+    "fabric_api": "0.128.2+1.21.5",
+    "api_url": "https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-api/0.128.2+1.21.5/fabric-api-0.128.2+1.21.5.jar",
+    "api_sha1": "920dea0ac4ff08f539099215eace9fda3e3fb2e3"
+  },
+  "1.21.6": {
+    "metadata": {
+      "id": "1.21.6",
+      "type": "release",
+      "url": "https://piston-meta.mojang.com/v1/packages/4eb09bebca2356f7505e45544087d3109e8ce0e3/1.21.6.json",
+      "time": "2026-11-03T06:48:01+00:00",
+      "releaseTime": "2025-06-17T11:10:28+00:00",
+      "sha1": "4eb09bebca2356f7505e45544087d3109e8ce0e3",
+      "complianceLevel": 1
+    },
+    "downloads": {
+      "client": {
+        "sha1": "740a125b83dd3447feaa3c5e891ead7fbb21ae28",
+        "size": 29516555,
+        "url": "https://piston-data.mojang.com/v1/objects/740a125b83dd3447feaa3c5e891ead7fbb21ae28/client.jar"
+      },
+      "client_mappings": {
+        "sha1": "848855615bc81e3db1c85e69b6afb150807a1261",
+        "size": 10987575,
+        "url": "https://piston-data.mojang.com/v1/objects/848855615bc81e3db1c85e69b6afb150807a1261/client.txt"
+      },
+      "server": {
+        "sha1": "6e64dcabba3c01a7271b4fa6bd898483b794c59b",
+        "size": 57554576,
+        "url": "https://piston-data.mojang.com/v1/objects/6e64dcabba3c01a7271b4fa6bd898483b794c59b/server.jar"
+      },
+      "server_mappings": {
+        "sha1": "94d453080a58875d3acc1a9a249809767c91ed40",
+        "size": 8185946,
+        "url": "https://piston-data.mojang.com/v1/objects/94d453080a58875d3acc1a9a249809767c91ed40/server.txt"
+      }
+    },
+    "fabric_api": "0.128.2+1.21.6",
+    "api_url": "https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-api/0.128.2+1.21.6/fabric-api-0.128.2+1.21.6.jar",
+    "api_sha1": "b273a883a3864108453a5d5f0b9e4f0a870c9579"
+  },
+  "1.21.7": {
+    "metadata": {
+      "id": "1.21.7",
+      "type": "release",
+      "url": "https://piston-meta.mojang.com/v1/packages/1b478ff245de95b05e3c1a1589f391ade22e1bd3/1.21.7.json",
+      "time": "2026-11-03T06:48:01+00:00",
+      "releaseTime": "2025-06-30T09:32:16+00:00",
+      "sha1": "1b478ff245de95b05e3c1a1589f391ade22e1bd3",
+      "complianceLevel": 1
+    },
+    "downloads": {
+      "client": {
+        "sha1": "a2db1ea98c37b2d00c83f6867fb8bb581a593e07",
+        "size": 29522178,
+        "url": "https://piston-data.mojang.com/v1/objects/a2db1ea98c37b2d00c83f6867fb8bb581a593e07/client.jar"
+      },
+      "client_mappings": {
+        "sha1": "8d83af626cae1865deaf55fbf96934be4886fd45",
+        "size": 10988969,
+        "url": "https://piston-data.mojang.com/v1/objects/8d83af626cae1865deaf55fbf96934be4886fd45/client.txt"
+      },
+      "server": {
+        "sha1": "05e4b48fbc01f0385adb74bcff9751d34552486c",
+        "size": 57556704,
+        "url": "https://piston-data.mojang.com/v1/objects/05e4b48fbc01f0385adb74bcff9751d34552486c/server.jar"
+      },
+      "server_mappings": {
+        "sha1": "eb1e1eb47cb740012fc82eacc394859463684132",
+        "size": 8186232,
+        "url": "https://piston-data.mojang.com/v1/objects/eb1e1eb47cb740012fc82eacc394859463684132/server.txt"
+      }
+    },
+    "fabric_api": "0.129.0+1.21.7",
+    "api_url": "https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-api/0.129.0+1.21.7/fabric-api-0.129.0+1.21.7.jar",
+    "api_sha1": "60bb50ad1f7d316be9ba662e84089e1affdd44e6"
+  },
+  "1.21.8": {
+    "metadata": {
+      "id": "1.21.8",
+      "type": "release",
+      "url": "https://piston-meta.mojang.com/v1/packages/17db9704e95a73d53452f07a9b472e428288defa/1.21.8.json",
+      "time": "2026-11-03T06:48:01+00:00",
+      "releaseTime": "2025-07-17T12:04:02+00:00",
+      "sha1": "17db9704e95a73d53452f07a9b472e428288defa",
+      "complianceLevel": 1
+    },
+    "downloads": {
+      "client": {
+        "sha1": "a19d9badbea944a4369fd0059e53bf7286597576",
+        "size": 29525242,
+        "url": "https://piston-data.mojang.com/v1/objects/a19d9badbea944a4369fd0059e53bf7286597576/client.jar"
+      },
+      "client_mappings": {
+        "sha1": "bdeb624c3aefba11d9d40f34bc96176350b549b6",
+        "size": 10989738,
+        "url": "https://piston-data.mojang.com/v1/objects/bdeb624c3aefba11d9d40f34bc96176350b549b6/client.txt"
+      },
+      "server": {
+        "sha1": "6bce4ef400e4efaa63a13d5e6f6b500be969ef81",
+        "size": 57555044,
+        "url": "https://piston-data.mojang.com/v1/objects/6bce4ef400e4efaa63a13d5e6f6b500be969ef81/server.jar"
+      },
+      "server_mappings": {
+        "sha1": "eb1e1eb47cb740012fc82eacc394859463684132",
+        "size": 8186232,
+        "url": "https://piston-data.mojang.com/v1/objects/eb1e1eb47cb740012fc82eacc394859463684132/server.txt"
+      }
+    },
+    "fabric_api": "0.136.1+1.21.8",
+    "api_url": "https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-api/0.136.1+1.21.8/fabric-api-0.136.1+1.21.8.jar",
+    "api_sha1": "56a377bdbf4d83a90d6863ca91b4776f7f09a46b"
+  },
+  "1.21.9": {
+    "metadata": {
+      "id": "1.21.9",
+      "type": "release",
+      "url": "https://piston-meta.mojang.com/v1/packages/811c9cc308cd5b928defa6434a7975233eaa6184/1.21.9.json",
+      "time": "2026-11-03T06:48:35+00:00",
+      "releaseTime": "2025-09-30T11:58:43+00:00",
+      "sha1": "811c9cc308cd5b928defa6434a7975233eaa6184",
+      "complianceLevel": 1
+    },
+    "downloads": {
+      "client": {
+        "sha1": "ce92fd8d1b2460c41ceda07ae7b3fe863a80d045",
+        "size": 30591861,
+        "url": "https://piston-data.mojang.com/v1/objects/ce92fd8d1b2460c41ceda07ae7b3fe863a80d045/client.jar"
+      },
+      "client_mappings": {
+        "sha1": "3641ccb54eac2153c7e8274823c5a8e046beaba0",
+        "size": 11510637,
+        "url": "https://piston-data.mojang.com/v1/objects/3641ccb54eac2153c7e8274823c5a8e046beaba0/client.txt"
+      },
+      "server": {
+        "sha1": "11e54c2081420a4d49db3007e66c80a22579ff2a",
+        "size": 58638725,
+        "url": "https://piston-data.mojang.com/v1/objects/11e54c2081420a4d49db3007e66c80a22579ff2a/server.jar"
+      },
+      "server_mappings": {
+        "sha1": "587e016fe8a876cbc1cc98d73f9d0d79bfb32b2c",
+        "size": 8472780,
+        "url": "https://piston-data.mojang.com/v1/objects/587e016fe8a876cbc1cc98d73f9d0d79bfb32b2c/server.txt"
+      }
+    },
+    "fabric_api": "0.134.1+1.21.9",
+    "api_url": "https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-api/0.134.1+1.21.9/fabric-api-0.134.1+1.21.9.jar",
+    "api_sha1": "c1ccbf0f5d3aca7d86963677da71e700498c3c9b"
+  },
+  "1.21.10": {
+    "metadata": {
+      "id": "1.21.10",
+      "type": "release",
+      "url": "https://piston-meta.mojang.com/v1/packages/b0dc919ace9cee9a91d5a6dcaa594d41a26fcb1b/1.21.10.json",
+      "time": "2026-11-03T06:48:35+00:00",
+      "releaseTime": "2025-10-07T09:17:23+00:00",
+      "sha1": "b0dc919ace9cee9a91d5a6dcaa594d41a26fcb1b",
+      "complianceLevel": 1
+    },
+    "downloads": {
+      "client": {
+        "sha1": "d3bdf582a7fa723ce199f3665588dcfe6bf9aca8",
+        "size": 30592168,
+        "url": "https://piston-data.mojang.com/v1/objects/d3bdf582a7fa723ce199f3665588dcfe6bf9aca8/client.jar"
+      },
+      "client_mappings": {
+        "sha1": "7e62354a697f95cf5e7d5981face0583676a9ef7",
+        "size": 11511143,
+        "url": "https://piston-data.mojang.com/v1/objects/7e62354a697f95cf5e7d5981face0583676a9ef7/client.txt"
+      },
+      "server": {
+        "sha1": "95495a7f485eedd84ce928cef5e223b757d2f764",
+        "size": 58642415,
+        "url": "https://piston-data.mojang.com/v1/objects/95495a7f485eedd84ce928cef5e223b757d2f764/server.jar"
+      },
+      "server_mappings": {
+        "sha1": "c5440743411a6fd7490fa18a4b6c5d8edf36d88b",
+        "size": 8473286,
+        "url": "https://piston-data.mojang.com/v1/objects/c5440743411a6fd7490fa18a4b6c5d8edf36d88b/server.txt"
+      }
+    },
+    "fabric_api": "0.138.4+1.21.10",
+    "api_url": "https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-api/0.138.4+1.21.10/fabric-api-0.138.4+1.21.10.jar",
+    "api_sha1": "0345c20b71007521a25b393091adeb45328d7c57"
+  },
+  "1.21.11": {
+    "metadata": {
+      "id": "1.21.11",
+      "type": "release",
+      "url": "https://piston-meta.mojang.com/v1/packages/35f8a9bc4874e2c95e51b3ad21e043a33776f7c2/1.21.11.json",
+      "time": "2026-11-03T06:49:47+00:00",
+      "releaseTime": "2025-12-09T12:23:30+00:00",
+      "sha1": "35f8a9bc4874e2c95e51b3ad21e043a33776f7c2",
+      "complianceLevel": 1
+    },
+    "downloads": {
+      "client": {
+        "sha1": "ba2df812c2d12e0219c489c4cd9a5e1f0760f5bd",
+        "size": 31152600,
+        "url": "https://piston-data.mojang.com/v1/objects/ba2df812c2d12e0219c489c4cd9a5e1f0760f5bd/client.jar"
+      },
+      "client_mappings": {
+        "sha1": "031a68bebf55d824f66d6573d8c752f0e1bf232a",
+        "size": 11779287,
+        "url": "https://piston-data.mojang.com/v1/objects/031a68bebf55d824f66d6573d8c752f0e1bf232a/client.txt"
+      },
+      "server": {
+        "sha1": "64bb6d763bed0a9f1d632ec347938594144943ed",
+        "size": 56327581,
+        "url": "https://piston-data.mojang.com/v1/objects/64bb6d763bed0a9f1d632ec347938594144943ed/server.jar"
+      },
+      "server_mappings": {
+        "sha1": "5621e9253f05fd57872bbe7f8ddf5f9a7d525955",
+        "size": 8678606,
+        "url": "https://piston-data.mojang.com/v1/objects/5621e9253f05fd57872bbe7f8ddf5f9a7d525955/server.txt"
+      }
+    },
+    "fabric_api": "0.141.6+1.21.11",
+    "api_url": "https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-api/0.141.6+1.21.11/fabric-api-0.141.6+1.21.11.jar",
+    "api_sha1": "c98467cbbaf4d197377266795ae015f4130d65b6"
+  },
+  "26.1": {
+    "metadata": {
+      "id": "26.1",
+      "type": "release",
+      "url": "https://piston-meta.mojang.com/v1/packages/90d81d9cd00c1ce55eb2b40aad4f1112bb58f12a/26.1.json",
+      "time": "2026-11-03T06:50:53+00:00",
+      "releaseTime": "2026-03-24T12:11:04+00:00",
+      "sha1": "90d81d9cd00c1ce55eb2b40aad4f1112bb58f12a",
+      "complianceLevel": 1
+    },
+    "downloads": {
+      "client": {
+        "sha1": "191771837687b766537a8c4607cb6fad79c533a1",
+        "size": 38113398,
+        "url": "https://piston-data.mojang.com/v1/objects/191771837687b766537a8c4607cb6fad79c533a1/client.jar"
+      },
+      "server": {
+        "sha1": "3872a7f07a1a595e651aef8b058dfc2bb3772f46",
+        "size": 60417588,
+        "url": "https://piston-data.mojang.com/v1/objects/3872a7f07a1a595e651aef8b058dfc2bb3772f46/server.jar"
+      }
+    },
+    "fabric_api": "0.145.1+26.1",
+    "api_url": "https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-api/0.145.1+26.1/fabric-api-0.145.1+26.1.jar",
+    "api_sha1": "088edb9dfcda202a8bdf4ea77b6a8ced41481734"
+  },
+  "26.1.1": {
+    "metadata": {
+      "id": "26.1.1",
+      "type": "release",
+      "url": "https://piston-meta.mojang.com/v1/packages/f242283c7b8a4c2a75668578248aee60928d2613/26.1.1.json",
+      "time": "2026-11-03T06:50:53+00:00",
+      "releaseTime": "2026-04-01T09:06:36+00:00",
+      "sha1": "f242283c7b8a4c2a75668578248aee60928d2613",
+      "complianceLevel": 1
+    },
+    "downloads": {
+      "client": {
+        "sha1": "377031a9e733ba8ab4d355959a8f6fb8eb707556",
+        "size": 38113231,
+        "url": "https://piston-data.mojang.com/v1/objects/377031a9e733ba8ab4d355959a8f6fb8eb707556/client.jar"
+      },
+      "server": {
+        "sha1": "49c8195703ad0ba4f0a4efbccfd85a4a8ca57431",
+        "size": 60417481,
+        "url": "https://piston-data.mojang.com/v1/objects/49c8195703ad0ba4f0a4efbccfd85a4a8ca57431/server.jar"
+      }
+    },
+    "fabric_api": "0.145.4+26.1.1",
+    "api_url": "https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-api/0.145.4+26.1.1/fabric-api-0.145.4+26.1.1.jar",
+    "api_sha1": "bb199e859c384ae1bacfb4107a82ae3d98416609"
+  },
+  "26.1.2": {
+    "metadata": {
+      "id": "26.1.2",
+      "type": "release",
+      "url": "https://piston-meta.mojang.com/v1/packages/4e49d699db7dba839226d0ed1fcf36c465c2edbe/26.1.2.json",
+      "time": "2026-11-03T06:50:53+00:00",
+      "releaseTime": "2026-04-09T10:12:23+00:00",
+      "sha1": "4e49d699db7dba839226d0ed1fcf36c465c2edbe",
+      "complianceLevel": 1
+    },
+    "downloads": {
+      "client": {
+        "sha1": "4e618f09a0c649dde3fdf829df443ce0b8831e65",
+        "size": 38113927,
+        "url": "https://piston-data.mojang.com/v1/objects/4e618f09a0c649dde3fdf829df443ce0b8831e65/client.jar"
+      },
+      "server": {
+        "sha1": "97ccd4c0ed3f81bbb7bfacddd1090b0c56f9bc51",
+        "size": 60417480,
+        "url": "https://piston-data.mojang.com/v1/objects/97ccd4c0ed3f81bbb7bfacddd1090b0c56f9bc51/server.jar"
+      }
+    },
+    "fabric_api": "0.155.3+26.1.2",
+    "api_url": "https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-api/0.155.3+26.1.2/fabric-api-0.155.3+26.1.2.jar",
+    "api_sha1": "16c30dfcceaed1ac3b6ac84cbd348a906dc5093e"
+  },
+  "26.2": {
+    "metadata": {
+      "id": "26.2",
+      "type": "release",
+      "url": "https://piston-meta.mojang.com/v1/packages/09165f570b16394790c4e37c93b0918729615d17/26.2.json",
+      "time": "2026-11-03T06:52:11+00:00",
+      "releaseTime": "2026-06-16T12:03:33+00:00",
+      "sha1": "09165f570b16394790c4e37c93b0918729615d17",
+      "complianceLevel": 1
+    },
+    "downloads": {
+      "client": {
+        "sha1": "2dc72797acbc1b63fc16a11c4ac393605f453754",
+        "size": 39193383,
+        "url": "https://piston-data.mojang.com/v1/objects/2dc72797acbc1b63fc16a11c4ac393605f453754/client.jar"
+      },
+      "server": {
+        "sha1": "823e2250d24b3ddac457a60c92a6a941943fcd6a",
+        "size": 60894273,
+        "url": "https://piston-data.mojang.com/v1/objects/823e2250d24b3ddac457a60c92a6a941943fcd6a/server.jar"
+      }
+    },
+    "fabric_api": "0.161.0+26.2",
+    "api_url": "https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-api/0.161.0+26.2/fabric-api-0.161.0+26.2.jar",
+    "api_sha1": "332da34ebb72171e603a0c538de17f4c54ea9e29"
+  },
+  "26.3": {
+    "metadata": {
+      "id": "26.3",
+      "type": "release",
+      "url": "https://piston-meta.mojang.com/v1/packages/80608ff6753705b6a82e2cb86a5937d4d233abd4/26.3.json",
+      "time": "2026-11-03T06:53:32+00:00",
+      "releaseTime": "2026-09-15T11:23:02+00:00",
+      "sha1": "80608ff6753705b6a82e2cb86a5937d4d233abd4",
+      "complianceLevel": 1
+    },
+    "downloads": {
+      "client": {
+        "sha1": "e877b6a07acd633fb3bb475002175cec036e7b87",
+        "size": 41483720,
+        "url": "https://piston-data.mojang.com/v1/objects/e877b6a07acd633fb3bb475002175cec036e7b87/client.jar"
+      },
+      "server": {
+        "sha1": "33680f5f2ac32864d6d7cf5e56a705fdb3e05f4c",
+        "size": 62294556,
+        "url": "https://piston-data.mojang.com/v1/objects/33680f5f2ac32864d6d7cf5e56a705fdb3e05f4c/server.jar"
+      }
+    },
+    "fabric_api": "0.165.2+26.3",
+    "api_url": "https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-api/0.165.2+26.3/fabric-api-0.165.2+26.3.jar",
+    "api_sha1": "2e364989e3f6efb97e1dbd12d80d835c7ab8c26c"
+  }
+}

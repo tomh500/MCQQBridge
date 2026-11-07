@@ -17,10 +17,11 @@ def updated(text):
 
 
 def main():
-    root = Path(__file__).resolve().parents[2]
+    project = Path(__file__).resolve().parents[1]
+    root = project.parent.parent if project.parent.name == "_work" else project.parent
     config = root / "proxy/plugins/BungeeChat/config.conf"
     value = updated(config.read_text(encoding="utf-8-sig"))
-    backup = root / "qqbot/deployment-backups" / ("source-formats-" + time.strftime("%Y%m%d-%H%M%S"))
+    backup = project / "deployment-backups" / ("source-formats-" + time.strftime("%Y%m%d-%H%M%S"))
     backup.mkdir(parents=True)
     shutil.copy2(config, backup / "BungeeChat-config.conf")
     config.write_text(value, encoding="utf-8")

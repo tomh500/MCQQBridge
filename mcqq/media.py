@@ -36,6 +36,7 @@ def qq_url(value):
 def extract(data):
     """Preserve images even when SDK models drop rich-message fields or content is empty."""
     items, texts, seen = [], [], set()
+    missing_face = False
 
     def add(url, kind):
         try:
@@ -47,6 +48,7 @@ def extract(data):
             items.append({"url": url, "kind": kind})
 
     def visit(node, depth=0):
+        nonlocal missing_face
         if depth > 4 or not isinstance(node, dict):
             return
         content = node.get("content") or ""
@@ -59,13 +61,20 @@ def extract(data):
                         face = candidate
                 except (ValueError, TypeError):
                     pass
+            # QQ may serialize rich faces as a diagnostic-looking angle-bracket
+            # token rather than JSON, including inside otherwise normal text.
+            def strip_face(match):
+                nonlocal missing_face
+                missing_face = True
+                return ""
+            content = re.sub(r'<faceType\s*=\s*[^<>]*?faceId\s*=\s*[^<>]*?>', strip_face, content, flags=re.I)
             if face:
                 # QQ's standard face IDs have an official public GIF counterpart.
                 face_id = str(face.get("faceId", ""))
                 if str(face.get("faceType")) == "1" and re.fullmatch(r"\d{1,4}", face_id):
                     add("https://qzonestyle.gtimg.cn/qzone/em/e" + face_id + ".gif", "sticker")
                 else:
-                    texts.append("[表情包：暂无图片链接]")
+                    missing_face = True
             elif content.strip() not in ("", "[图片]", "[表情包]"):
                 texts.append(content)
         for attachment in (node.get("attachments") or [])[:MAX_ITEMS]:
@@ -79,7 +88,9 @@ def extract(data):
         for child in (node.get("msg_elements") or [])[:MAX_ITEMS]:
             visit(child, depth + 1)
     visit(data)
-    return {"text": " ".join(dict.fromkeys(texts)), "media": items}
+    if missing_face and not items:
+        texts.append("[表情包：暂无图片链接]")
+    return {"text": " ".join(dict.fromkeys(texts)).strip(), "media": items}
 
 
 def image_type(data):

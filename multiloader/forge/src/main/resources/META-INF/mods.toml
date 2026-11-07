@@ -1,0 +1,14 @@
+modLoader="javafml"
+loaderVersion="[65,)"
+license="MIT"
+[[mods]]
+modId="mcqq_images"
+version="1.2.0-dev"
+displayName="MC QQ Images"
+description="Inline QQ chat images"
+[[dependencies.mcqq_images]]
+modId="minecraft"
+mandatory=true
+versionRange="[26.2,26.4)"
+ordering="NONE"
+side="CLIENT"

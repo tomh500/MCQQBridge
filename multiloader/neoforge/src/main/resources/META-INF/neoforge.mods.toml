@@ -1,0 +1,16 @@
+modLoader="javafml"
+loaderVersion="[1,)"
+license="MIT"
+[[mods]]
+modId="mcqq_images"
+version="1.2.0-dev"
+displayName="MC QQ Images"
+description="Inline QQ chat images"
+[[mixins]]
+config="mcqq-images.mixins.json"
+[[dependencies.mcqq_images]]
+modId="minecraft"
+type="required"
+versionRange="[26.2,26.4)"
+ordering="NONE"
+side="CLIENT"

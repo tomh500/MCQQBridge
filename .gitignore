@@ -19,3 +19,8 @@ dist/
 *.der
 core/
 test-sandbox/
+
+**/.cache/
+
+!multiloader/**/gradle/wrapper/gradle-wrapper.jar
+**/run/

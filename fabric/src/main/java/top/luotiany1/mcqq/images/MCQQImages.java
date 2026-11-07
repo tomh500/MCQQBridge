@@ -19,6 +19,10 @@ import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.ChatComponent;
+import net.minecraft.client.gui.screens.ChatScreen;
+import net.minecraft.client.multiplayer.chat.GuiMessage;
+import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.network.chat.ClickEvent;
@@ -38,10 +42,13 @@ public final class MCQQImages implements ClientModInitializer {
             for(String value:config.getProperty("trusted-media-bases", "").split(",")) {
                 if(value.isBlank()) continue;
                 URI uri=URI.create(value.trim());
-                if(uri.getHost()!=null && uri.getUserInfo()==null && (uri.getScheme().equals("https") || uri.getScheme().equals("http")) && uri.getPath().endsWith("/")) MEDIA_BASES.add(uri);
+                if(uri.getHost()!=null && uri.getUserInfo()==null && uri.getQuery()==null && uri.getFragment()==null && ("https".equals(uri.getScheme()) || "http".equals(uri.getScheme())) && uri.getPath().endsWith("/")) MEDIA_BASES.add(uri.normalize());
             }
         } catch(Exception ignored) { }
     }
+    private static final int IMAGE_LINES = 7;
+    private final Map<Component, List<URI>> chatImages = new java.util.WeakHashMap<>();
+    private java.lang.reflect.Field chatLines, chatScroll;
     private final Minecraft client = Minecraft.getInstance();
     private final Map<String, Preview> previews = new LinkedHashMap<>();
     private final java.util.concurrent.ExecutorService workers = Executors.newFixedThreadPool(2, runnable -> {
@@ -62,28 +69,55 @@ public final class MCQQImages implements ClientModInitializer {
     }
     @Override public void onInitializeClient() {
         loadMediaConfig();
-        ClientReceiveMessageEvents.GAME.register((message, overlay) -> {
-            if (!overlay && (message.getString().contains("[图片]") || message.getString().contains("[表情包]"))) inspect(message, message.getString());
-        });
-        HudElementRegistry.attachElementBefore(VanillaHudElements.CHAT, Identifier.fromNamespaceAndPath("mcqq_images", "previews"), (graphics, delta) -> render(graphics));
-        ClientPlayConnectionEvents.DISCONNECT.register((handler, minecraft) -> clear());
-    }
-    private void inspect(Component component, String caption) {
-        var click = component.getStyle().getClickEvent();
-        if (click instanceof ClickEvent.OpenUrl link && (component.getString().contains("[图片]") || component.getString().contains("[表情包]"))) {
-            URI uri = link.uri();
-            if (allowed(uri) && !previews.containsKey(uri.toString())) {
-                while (previews.size() >= 6) evict(previews.keySet().iterator().next());
-                Preview preview = new Preview(caption.length()>45 ? caption.substring(0,45) : caption);
-                previews.put(uri.toString(), preview);
-                workers.execute(() -> load(uri, preview));
-            }
+        try {
+            chatLines = ChatComponent.class.getDeclaredField("trimmedMessages");
+            chatScroll = ChatComponent.class.getDeclaredField("chatScrollbarPos");
+            chatLines.setAccessible(true); chatScroll.setAccessible(true);
+        } catch (ReflectiveOperationException error) {
+            System.err.println("[MCQQ Images] Chat integration unavailable: " + error);
+            return;
         }
-        for (Component child : component.getSiblings()) inspect(child, caption);
+        ClientReceiveMessageEvents.MODIFY_GAME.register((message, overlay) -> {
+            if (overlay) return message;
+            List<URI> links = new ArrayList<>();
+            findLinks(message, links);
+            if (links.isEmpty()) return message;
+            var result = message.copy();
+            // Native chat wrapping and scrolling own these placeholder lines.
+            for (int i=0; i<IMAGE_LINES*links.size(); i++) result.append("\n ");
+            chatImages.put(result, List.copyOf(links));
+            return result;
+        });
+        HudElementRegistry.attachElementAfter(VanillaHudElements.CHAT, Identifier.fromNamespaceAndPath("mcqq_images", "chat_images"), (graphics, delta) -> {
+            if (!(client.gui.screen() instanceof ChatScreen)) render(graphics);
+        });
+        ScreenEvents.AFTER_INIT.register((minecraft, screen, width, height) -> {
+            if (screen instanceof ChatScreen) ScreenEvents.afterExtract(screen).register((s, graphics, mouseX, mouseY, delta) -> render(graphics));
+        });
+        ClientPlayConnectionEvents.DISCONNECT.register((handler, minecraft) -> client.execute(() -> { clear(); chatImages.clear(); }));
+    }
+    private void findLinks(Component component, List<URI> links) {
+        var click = component.getStyle().getClickEvent();
+        if (click instanceof ClickEvent.OpenUrl link && (component.getString().contains("[图片]") || component.getString().contains("[表情包]"))
+            && allowed(link.uri()) && links.size() < 8) links.add(link.uri());
+        for (Component child : component.getSiblings()) findLinks(child, links);
+    }
+    private Preview preview(URI uri) {
+        String key=uri.toString();
+        Preview result=previews.get(key);
+        if (result==null) {
+            while (previews.size()>=6) evict(previews.keySet().iterator().next());
+            result=new Preview(""); previews.put(key,result);
+            Preview requested=result; workers.execute(() -> load(uri,requested));
+        }
+        return result;
     }
     static boolean allowed(URI uri) {
         String host = uri.getHost();
-        if (host == null || uri.getUserInfo() != null) return false;
+        if (host == null || uri.getUserInfo() != null || uri.getFragment() != null) return false;
+        if (!"https".equals(uri.getScheme()) && !"http".equals(uri.getScheme())) return false;
+        String rawPath=uri.getRawPath();
+        if(rawPath==null || rawPath.toLowerCase(java.util.Locale.ROOT).matches(".*%(2e|2f|5c).*"))return false;
         host = host.toLowerCase(java.util.Locale.ROOT);
         for(URI base: MEDIA_BASES) if(host.equalsIgnoreCase(base.getHost()) && uri.getScheme().equals(base.getScheme()) && uri.getPort()==base.getPort() && uri.normalize().getPath().startsWith(base.getPath())) return true;
         if (!uri.getScheme().equals("https") && !uri.getScheme().equals("http")) return false;
@@ -116,8 +150,9 @@ public final class MCQQImages implements ClientModInitializer {
                     int index=0;
                     for (var frame : decoded) {
                         var image=frame.image();
-                        NativeImage pixels=new NativeImage(image.getWidth(),image.getHeight(),false);
-                        for (int y=0;y<image.getHeight();y++) for (int x=0;x<image.getWidth();x++) pixels.setPixel(x,y,image.getRGB(x,y));
+                        java.io.ByteArrayOutputStream png=new java.io.ByteArrayOutputStream();
+                        javax.imageio.ImageIO.write(image,"PNG",png);
+                        NativeImage pixels=NativeImage.read(png.toByteArray());
                         Identifier id=Identifier.fromNamespaceAndPath("mcqq_images", "image/"+java.util.UUID.randomUUID()+"/"+index++);
                         client.getTextureManager().register(id,new DynamicTexture(() -> "QQ chat image",pixels));
                         preview.frames.add(id); preview.delays.add(frame.milliseconds());
@@ -127,25 +162,49 @@ public final class MCQQImages implements ClientModInitializer {
             });
         } catch (Exception failure) { client.execute(() -> preview.failed=true); }
     }
+    @SuppressWarnings("unchecked")
     private void render(GuiGraphicsExtractor graphics) {
-        if (client.level==null || client.gui.hud.isHidden()) return;
-        long now=System.currentTimeMillis();
-        var expired=previews.entrySet().stream().filter(e -> now-e.getValue().created>=3_600_000).map(Map.Entry::getKey).toList();
-        for (String key : expired) evict(key);
-        int y=24, shown=0, boxWidth=Math.min(170,graphics.guiWidth()/3), x=graphics.guiWidth()-boxWidth-8;
-        var entries=new ArrayList<>(previews.values());
-        java.util.Collections.reverse(entries);
-        for (Preview preview : entries) {
-            if (shown>=3 || y+35>=graphics.guiHeight()) break;
-            if (now-preview.created>30_000 && client.gui.screen()==null) continue;
-            int w=boxWidth-8, h=preview.height==0 ? 25 : Math.max(1,Math.min(95,(int)(w*(double)preview.height/preview.width)));
-            w=preview.width==0 ? w : Math.max(1,Math.min(w,(int)(h*(double)preview.width/preview.height)));
-            graphics.fill(x-3,y-3,x+boxWidth+3,y+h+17,0xBB101820);
-            graphics.text(client.font,client.font.plainSubstrByWidth(preview.caption,boxWidth-4),x,y,0xFFFFFFFF);
-            if (!preview.frames.isEmpty() && !preview.failed) {
-                graphics.blit(RenderPipelines.GUI_TEXTURED,preview.frame(now),x,y+12,0f,0f,w,h,preview.width,preview.height,preview.width,preview.height);
-            } else graphics.text(client.font,preview.failed ? "图片不可用，点击聊天链接打开" : "正在加载图片…",x,y+14,0xFFAAAAAA);
-            y+=h+24; shown++;
+        if (client.level==null || client.gui.hud.isHidden() || client.options.chatVisibility().get()==net.minecraft.world.entity.player.ChatVisiblity.HIDDEN) return;
+        try {
+            ChatComponent chat=client.gui.hud.getChat();
+            List<GuiMessage.Line> lines=(List<GuiMessage.Line>)chatLines.get(chat);
+            int scroll=chatScroll.getInt(chat), page=chat.getLinesPerPage();
+            boolean focused=chat.isChatFocused();
+            float scale=client.options.chatScale().get().floatValue();
+            int lineHeight=(int)(client.font.lineHeight*(client.options.chatLineSpacing().get()+1.0));
+            int bottom=(int)Math.floor((graphics.guiHeight()-40)/scale);
+            int chatWidth=(int)Math.floor(ChatComponent.getWidth(client.options.chatWidth().get())/scale);
+            int top=bottom-page*lineHeight;
+            if (lineHeight<=0 || scale<=0) return;
+            java.util.IdentityHashMap<GuiMessage, Integer> first=new java.util.IdentityHashMap<>();
+            for (int i=0;i<lines.size();i++) first.putIfAbsent(lines.get(i).parent(),i);
+            graphics.enableScissor(0, Math.max(0,(int)Math.floor(top*scale)), Math.min(graphics.guiWidth(),(int)Math.ceil((chatWidth+8)*scale)), Math.min(graphics.guiHeight(),(int)Math.ceil(bottom*scale)));
+            graphics.pose().pushMatrix(); graphics.pose().scale(scale,scale); graphics.pose().translate(4,0);
+            try {
+                long now=System.currentTimeMillis();
+                for (var item:first.entrySet()) {
+                    GuiMessage message=item.getKey(); List<URI> images=chatImages.get(message.content());
+                    if (images==null || (!focused && client.gui.hud.getGuiTicks()-message.addedTime()>=200)) continue;
+                    int base=item.getValue()-scroll;
+                    for (int i=0;i<images.size();i++) {
+                        int lower=base+(images.size()-1-i)*IMAGE_LINES;
+                        int y=bottom-(lower+IMAGE_LINES)*lineHeight;
+                        int blockHeight=IMAGE_LINES*lineHeight;
+                        if (y>=bottom || y+blockHeight<=top) continue;
+                        Preview image=preview(images.get(i));
+                        if (image.frames.isEmpty() || image.failed) {
+                            graphics.text(client.font,image.failed?"图片加载失败，点击链接打开":"正在加载图片…",0,y+2,0xFFFFFFFF);
+                            continue;
+                        }
+                        int maxWidth=Math.max(1, Math.min(108,chatWidth-4)), maxHeight=Math.max(1,Math.min(blockHeight-4,(9*lineHeight-4)*3/4));
+                        double factor=Math.min(maxWidth/(double)image.width,maxHeight/(double)image.height);
+                        int w=Math.max(1,(int)(image.width*factor)), h=Math.max(1,(int)(image.height*factor));
+                        graphics.blit(RenderPipelines.GUI_TEXTURED,image.frame(now),0,y+2,0f,0f,w,h,image.width,image.height,image.width,image.height);
+                    }
+                }
+            } finally { graphics.pose().popMatrix(); graphics.disableScissor(); }
+        } catch (ReflectiveOperationException error) {
+            System.err.println("[MCQQ Images] Cannot render chat images: "+error);
         }
     }
     private void evict(String key) {

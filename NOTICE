@@ -4,3 +4,6 @@ Original project code is licensed under Apache License 2.0.
 Third-party dependencies remain under their own licenses.
 Netease word lists are not redistributed in this repository.
 BungeeChat, Minecraft server binaries and Floodgate are installed separately and are not included.
+
+The image client under fabric/universal includes code from mcqq-images,
+Copyright (c) 2026 tomh500, distributed under the MIT license in fabric/universal/LICENSE.

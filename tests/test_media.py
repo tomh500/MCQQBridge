@@ -28,6 +28,13 @@ class ExtractionTests(unittest.TestCase):
         self.assertEqual(value["text"],"")
         self.assertEqual(value["media"],[{"kind":"sticker","url":"https://qzonestyle.gtimg.cn/qzone/em/e9.gif"}])
 
+    def test_angle_face_with_attachment_is_not_chat_text(self):
+        raw = '<faceType=6,faceId="0",ext="eyJ0ZXh0IjoiIn0=">'
+        value = media.extract({"content": raw, "attachments": [{"url": IMAGE, "content_type": "image/png"}]})
+        self.assertEqual(value["text"], "")
+        self.assertEqual(len(value["media"]), 1)
+        self.assertEqual(media.extract({"content": "hello " + raw})["text"], "hello  [表情包：暂无图片链接]")
+
     def test_untrusted_urls_and_html_are_not_images(self):
         for url in ("http://127.0.0.1/", "https://evil.qq.com.attacker.test/", "https://qq.com@127.0.0.1/", "file:///a", "https://qq.com:18765/"):
             with self.assertRaises(ValueError): media.qq_url(url)
