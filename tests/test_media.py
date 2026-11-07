@@ -58,7 +58,7 @@ class MediaHTTPTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(item["name"],"群友")
 
     async def test_fallback_is_public_image_only_and_expires(self):
-        cfg=dict(self.cfg,media={"public_base_url":"http://lemoe.luotiany1.top:18766/mcqq-media"})
+        cfg=dict(self.cfg,media={"public_base_url":"http://images.example.com:18766/mcqq-media"})
         app=web.Application()
         resolve,serve,cleanup=media.register(app,cfg,Store(self.cfg["database"]))
         app.router.add_get("/mcqq-media/{name}",serve)

@@ -58,6 +58,7 @@ public final class SaidPlugin extends JavaPlugin implements Listener {
         getServer().getPluginManager().registerEvents(this, this);
     }
     private void said(Player player, String text, String group) {
+        if (!getConfig().getBoolean("features.chat", true)) { player.sendMessage("群服聊天功能未启用。"); return; }
         if (!player.hasPermission("mcqq.said")) { player.sendMessage("你没有使用 /said 的权限。"); return; }
         if (text.trim().isEmpty()) { player.sendMessage("用法：/said 文本"); return; }
         if (text.length() > 2000 || text.chars().anyMatch(c -> c < 32 && c != 9)) {

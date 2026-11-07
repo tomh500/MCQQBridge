@@ -11,3 +11,5 @@ PNG/JPEG and GIF frames are decoded in background threads. Animated GIFs preserv
 This binary targets the Minecraft **26.2** rendering API used by the provided client screenshot. Minecraft26.1/26.3 are not declared compatible without a separate build and runtime check. Other mods that suppress Fabric's incoming-message or HUD events may affect previews; normal clickable links continue to work.
 
 Build with Java25 / Gradle9.6.1 and the included Fabric Loom project, or run `../.venv/Scripts/python build.py` from this directory. The Python build uses the official unobfuscated26.2 client and checksummed Fabric API dependencies, then tests PNG colors, animated GIF frames/timing and oversized-image rejection. GUI rendering is compiled against the26.2 API; an actual player client is still required for visual acceptance.
+
+自建图片服务需在 config/mcqq-images.properties 的 trusted-media-bases 填入以 / 结尾的受信任 URL 前缀，多项用逗号分隔。默认仅信任 QQ 图片域名。

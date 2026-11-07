@@ -5,6 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "mcqq-bridge"
 version = "2.0.0"
+license = {file = "LICENSE"}
 description = "QQ official bot and Minecraft group bridge"
 requires-python = ">=3.11"
 dependencies = ["qq-botpy==1.2.1", "aiohttp>=3.10,<4"]

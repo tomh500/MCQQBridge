@@ -28,6 +28,20 @@ import net.minecraft.resources.Identifier;
 public final class MCQQImages implements ClientModInitializer {
     private static final int MAX_BYTES = 8 * 1024 * 1024;
     private static final String[] QQ_HOSTS = {"qq.com", "qq.com.cn", "qpic.cn", "gtimg.cn", "gtimg.com", "idqqimg.com", "qlogo.cn"};
+    private static final java.util.List<URI> MEDIA_BASES = new java.util.ArrayList<>();
+    private static void loadMediaConfig() {
+        java.nio.file.Path file = net.fabricmc.loader.api.FabricLoader.getInstance().getConfigDir().resolve("mcqq-images.properties");
+        java.util.Properties config = new java.util.Properties();
+        try {
+            if (!java.nio.file.Files.exists(file)) java.nio.file.Files.writeString(file, "# Comma-separated trusted media base URLs, for example https://images.example.com/mcqq-media/\ntrusted-media-bases=\n");
+            try (var in=java.nio.file.Files.newBufferedReader(file)) { config.load(in); }
+            for(String value:config.getProperty("trusted-media-bases", "").split(",")) {
+                if(value.isBlank()) continue;
+                URI uri=URI.create(value.trim());
+                if(uri.getHost()!=null && uri.getUserInfo()==null && (uri.getScheme().equals("https") || uri.getScheme().equals("http")) && uri.getPath().endsWith("/")) MEDIA_BASES.add(uri);
+            }
+        } catch(Exception ignored) { }
+    }
     private final Minecraft client = Minecraft.getInstance();
     private final Map<String, Preview> previews = new LinkedHashMap<>();
     private final java.util.concurrent.ExecutorService workers = Executors.newFixedThreadPool(2, runnable -> {
@@ -47,8 +61,9 @@ public final class MCQQImages implements ClientModInitializer {
         }
     }
     @Override public void onInitializeClient() {
+        loadMediaConfig();
         ClientReceiveMessageEvents.GAME.register((message, overlay) -> {
-            if (!overlay && message.getString().contains("[群内]")) inspect(message, message.getString());
+            if (!overlay && (message.getString().contains("[图片]") || message.getString().contains("[表情包]"))) inspect(message, message.getString());
         });
         HudElementRegistry.attachElementBefore(VanillaHudElements.CHAT, Identifier.fromNamespaceAndPath("mcqq_images", "previews"), (graphics, delta) -> render(graphics));
         ClientPlayConnectionEvents.DISCONNECT.register((handler, minecraft) -> clear());
@@ -70,8 +85,7 @@ public final class MCQQImages implements ClientModInitializer {
         String host = uri.getHost();
         if (host == null || uri.getUserInfo() != null) return false;
         host = host.toLowerCase(java.util.Locale.ROOT);
-        if (host.equals("lemoe.luotiany1.top") && uri.getPath().startsWith("/mcqq-media/") &&
-            ((uri.getScheme().equals("http") && uri.getPort()==18766) || uri.getScheme().equals("https"))) return true;
+        for(URI base: MEDIA_BASES) if(host.equalsIgnoreCase(base.getHost()) && uri.getScheme().equals(base.getScheme()) && uri.getPort()==base.getPort() && uri.normalize().getPath().startsWith(base.getPath())) return true;
         if (!uri.getScheme().equals("https") && !uri.getScheme().equals("http")) return false;
         if (uri.getPort()!=-1 && uri.getPort()!=443 && uri.getPort()!=80) return false;
         for (String domain : QQ_HOSTS) if (host.equals(domain) || host.endsWith("."+domain)) return true;
