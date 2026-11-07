@@ -22,6 +22,8 @@ group-commands: {}
 storage:
   # yaml = 本地 data.yml；sql = SQLite/MySQL/PostgreSQL；mongodb = MongoDB。
   # yaml = local data.yml; sql = SQLite/MySQL/PostgreSQL; mongodb = MongoDB.
+  # 存储初始化失败会记录错误，聊天仍可使用；依赖数据的扩展功能会提示不可用。
+  # Storage initialization failures keep chat enabled; data-dependent extensions remain unavailable.
   type: yaml
   sql:
     # 仅 type: sql 生效。空字符串使用插件目录 data.db（SQLite）。/ Used only with type: sql; blank = local SQLite.

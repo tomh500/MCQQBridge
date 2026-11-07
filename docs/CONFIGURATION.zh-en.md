@@ -31,3 +31,7 @@ Spigot Storage API 的 MySQL 数据、机器人 SQLite 绑定/队列、代理 YA
 群路由使用官方 `group_openid`，不是数字群号。机器人允许群列表和入站群列表负责授权；群名和别名只负责显示。/ Routes use official group_openids, not numeric group numbers. Allowed/inbound lists control authorization; names and aliases control display only.
 
 公开模板的凭据全部为空。实际运行配置保存在用户空间，禁止提交到 Git。/ Public templates contain no credentials; keep actual configuration outside version control.
+
+## 存储故障与聊天 / Storage failures and chat
+
+存储初始化失败会记录错误，插件仍注册 `/said` 和群命令。不会静默改用其他数据库；扩展调用 `storage()` 时会明确收到 unavailable 错误，避免数据写入错误后端。MySQL 驱动单独打包到插件命名空间，避开 Spigot 1.12 内置旧驱动。/ Storage initialization failures keep chat commands registered. No silent backend fallback occurs; extensions calling storage() receive an explicit unavailable error. MySQL classes are relocated to avoid legacy Spigot driver collisions.

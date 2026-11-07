@@ -32,7 +32,12 @@ public final class Storage implements AutoCloseable {
             if (!table.matches("[A-Za-z_][A-Za-z0-9_]{0,62}")) throw new IllegalArgumentException("Invalid storage.sql.table");
             String url = config.getString("storage.sql.url", "");
             if (url.isEmpty()) url = "jdbc:sqlite:" + new File(directory, "data.db").getAbsolutePath();
-            sql = DriverManager.getConnection(url, config.getString("storage.sql.username", ""), config.getString("storage.sql.password", ""));
+            java.util.Properties credentials = new java.util.Properties();
+            credentials.setProperty("user", config.getString("storage.sql.username", ""));
+            credentials.setProperty("password", config.getString("storage.sql.password", ""));
+            // Legacy Spigot registers an obsolete MySQL driver globally. Select our bundled driver explicitly.
+            if (url.startsWith("jdbc:mysql:")) sql = new com.mysql.cj.jdbc.Driver().connect(url, credentials);
+            else sql = DriverManager.getConnection(url, credentials);
             try (Statement statement = sql.createStatement()) { statement.executeUpdate("CREATE TABLE IF NOT EXISTS " + table + " (setting_key VARCHAR(190) PRIMARY KEY, setting_value TEXT NOT NULL)"); }
             // Detect incompatible pre-existing tables before enabling the plugin.
             try (Statement statement = sql.createStatement(); ResultSet ignored = statement.executeQuery("SELECT setting_key,setting_value FROM " + table + " WHERE 1=0")) { }

@@ -21,7 +21,7 @@ import org.bukkit.configuration.ConfigurationSection;
 /** Captures the raw command tail so repeated spaces and punctuation survive. */
 public final class SaidPlugin extends JavaPlugin implements Listener {
     private Storage storage;
-    public Storage storage() { return storage; }
+    public Storage storage() { if(storage==null) throw new IllegalStateException("Storage is unavailable"); return storage; }
     @Override public void onDisable() { if(storage!=null) try { storage.close(); } catch(Exception e) { getLogger().warning("Storage shutdown failed"); } }
     private final Map<String, String> destinations = new HashMap<>();
     @Override public void onEnable() {
@@ -31,7 +31,7 @@ public final class SaidPlugin extends JavaPlugin implements Listener {
             getDataFolder().mkdirs(); java.nio.file.Files.copy(legacyConfig.toPath(), currentConfig.toPath());
         } catch(IOException e) { throw new IllegalStateException("Legacy configuration migration failed", e); }
         saveDefaultConfig();
-        try { storage = new Storage(this); } catch(Exception e) { getLogger().severe("Storage initialization failed: " + e.getClass().getSimpleName()); getServer().getPluginManager().disablePlugin(this); return; }
+        try { storage = new Storage(this); } catch(Exception e) { getLogger().severe("Storage initialization failed: " + e.getClass().getSimpleName() + "; chat remains enabled. Check database settings."); }
         if (!getConfig().getBoolean("features.chat", true)) return;
         ConfigurationSection commands = getConfig().getConfigurationSection("group-commands");
         if (commands != null) for (String name : commands.getKeys(false)) {
