@@ -17,6 +17,7 @@ public final class Storage implements AutoCloseable {
     private MongoCollection<Document> collection;
     private YamlConfiguration yaml;
     private File file;
+    private String table;
     public Storage(JavaPlugin plugin) throws Exception { this(plugin.getDataFolder(), plugin.getConfig()); }
     public Storage(File directory, org.bukkit.configuration.file.FileConfiguration config) throws Exception {
         directory.mkdirs();
@@ -27,10 +28,15 @@ public final class Storage implements AutoCloseable {
             mongo = MongoClients.create(config.getString("storage.mongodb.uri"));
             collection = mongo.getDatabase(config.getString("storage.mongodb.database", "mcqq")) .getCollection("settings");
         } else if (type.equals("sql")) {
+            table = config.getString("storage.sql.table", "mcqq_settings");
+            if (!table.matches("[A-Za-z_][A-Za-z0-9_]{0,62}")) throw new IllegalArgumentException("Invalid storage.sql.table");
             String url = config.getString("storage.sql.url", "");
             if (url.isEmpty()) url = "jdbc:sqlite:" + new File(directory, "data.db").getAbsolutePath();
             sql = DriverManager.getConnection(url, config.getString("storage.sql.username", ""), config.getString("storage.sql.password", ""));
-            try (Statement statement = sql.createStatement()) { statement.executeUpdate("CREATE TABLE IF NOT EXISTS mcqq_settings (setting_key VARCHAR(190) PRIMARY KEY, setting_value TEXT NOT NULL)"); }
+            try (Statement statement = sql.createStatement()) { statement.executeUpdate("CREATE TABLE IF NOT EXISTS " + table + " (setting_key VARCHAR(190) PRIMARY KEY, setting_value TEXT NOT NULL)"); }
+            // Detect incompatible pre-existing tables before enabling the plugin.
+            try (Statement statement = sql.createStatement(); ResultSet ignored = statement.executeQuery("SELECT setting_key,setting_value FROM " + table + " WHERE 1=0")) { }
+            catch (SQLException e) { sql.close(); throw new SQLException("Incompatible storage table; choose a dedicated storage.sql.table", e); }
         } else throw new IllegalArgumentException("Unknown storage.type");
     }
     private static void key(String key) { if (!key.matches("[a-zA-Z0-9_:/-]{1,190}")) throw new IllegalArgumentException("Invalid storage key"); }
@@ -39,7 +45,7 @@ public final class Storage implements AutoCloseable {
             try {
                 if (yaml != null) return yaml.getString(key);
                 if (collection != null) { Document value=collection.find(new Document("_id", key)).first(); return value == null ? null : value.getString("value"); }
-                try (PreparedStatement statement=sql.prepareStatement("SELECT setting_value FROM mcqq_settings WHERE setting_key=?")) {
+                try (PreparedStatement statement=sql.prepareStatement("SELECT setting_value FROM " + table + " WHERE setting_key=?")) {
                     statement.setString(1,key); try (ResultSet result=statement.executeQuery()) { return result.next() ? result.getString(1) : null; }
                 }
             } catch (Exception e) { throw new CompletionException(e); }
@@ -53,8 +59,8 @@ public final class Storage implements AutoCloseable {
                 if (collection != null) { if(value==null) collection.deleteOne(new Document("_id",key)); else collection.replaceOne(new Document("_id",key),new Document("_id",key).append("value",value),new ReplaceOptions().upsert(true)); return; }
                 sql.setAutoCommit(false);
                 try {
-                    try(PreparedStatement statement=sql.prepareStatement("DELETE FROM mcqq_settings WHERE setting_key=?")) { statement.setString(1,key); statement.executeUpdate(); }
-                    if(value!=null) try(PreparedStatement statement=sql.prepareStatement("INSERT INTO mcqq_settings(setting_key,setting_value) VALUES(?,?)")) { statement.setString(1,key);statement.setString(2,value);statement.executeUpdate(); }
+                    try(PreparedStatement statement=sql.prepareStatement("DELETE FROM " + table + " WHERE setting_key=?")) { statement.setString(1,key); statement.executeUpdate(); }
+                    if(value!=null) try(PreparedStatement statement=sql.prepareStatement("INSERT INTO " + table + "(setting_key,setting_value) VALUES(?,?)")) { statement.setString(1,key);statement.setString(2,value);statement.executeUpdate(); }
                     sql.commit();
                 } catch(Exception e) { sql.rollback(); throw e; } finally { sql.setAutoCommit(true); }
             } catch(Exception e) { throw new CompletionException(e); }

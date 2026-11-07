@@ -32,6 +32,7 @@ public final class MCQQBridge extends Plugin implements Listener {
     private volatile Configuration config;
     private volatile boolean configured;
     private volatile boolean enabled;
+    private net.md_5.bungee.api.scheduler.ScheduledTask recheckTask;
     private ChatBridge chat;
     private ChatPreferences chatPreferences;
     private WordFilter wordFilter;
@@ -103,7 +104,7 @@ public final class MCQQBridge extends Plugin implements Listener {
         wordFilter = new WordFilter(this);
         chat = new ChatBridge(this);
         chatPreferences = new ChatPreferences(this);
-        getProxy().getScheduler().schedule(this, this::recheck, 5, 5, TimeUnit.SECONDS);
+
     }
 
     private synchronized void loadConfig() {
@@ -132,6 +133,9 @@ public final class MCQQBridge extends Plugin implements Listener {
             config = loaded;
             enabled = requested;
             configured = true;
+            if (recheckTask != null) recheckTask.cancel();
+            int interval = Math.max(1, loaded.getInt("recheck-seconds", 5));
+            recheckTask = getProxy().getScheduler().schedule(this, this::recheck, interval, interval, TimeUnit.SECONDS);
             getLogger().info("QQ whitelist enabled=" + enabled);
         } catch (Exception e) {
             getLogger().severe("Invalid whitelist configuration; new logins will be denied: " + e.getClass().getSimpleName());

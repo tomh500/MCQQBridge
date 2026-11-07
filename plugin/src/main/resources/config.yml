@@ -1,25 +1,50 @@
-# Enable after the service and group binding have been configured.
+# MCQQBridge 代理配置 / Proxy configuration
+# 位置 / Location: proxy/plugins/MCQQBridge/config.yml
+# YAML 只能用空格缩进。配置 reload 后生效，首次安装需要重启。/ Use spaces; reload after edits, restart after installation.
+# 控制台执行 / Console: mcqq reload (旧命令 / legacy alias: qqwl reload)
+
+# 旧版白名单开关，保留兼容。features.whitelist 优先。/ Legacy whitelist switch; features.whitelist takes priority.
 enabled: false
+features:
+  # true: 只有授权绑定账号可进入；false: 不要求群绑定即可进入。
+  # true: require authorized group binding to log in; false: allow login without group binding.
+  # 关闭白名单仍可启用聊天。开启白名单要求代理 online_mode: true。
+  # Chat works independently. Whitelist requires proxy online_mode: true.
+  whitelist: false
+
+# Python API 地址，不是 QQ 官方接口地址。远程必须 HTTPS 或 SSH 隧道。
+# Python API endpoint, not the QQ API. Use HTTPS or an SSH tunnel for remote connections.
 service-url: http://127.0.0.1:18765
+# 与机器人 settings.json 的 proxy_token 完全一致，至少32个随机字符。/ Must match bot proxy_token; >=32 random characters.
 proxy-token: ''
+# HTTP 连接/读取超时，单位毫秒。/ HTTP connection/read timeouts in milliseconds.
 connect-timeout-ms: 2000
 read-timeout-ms: 3000
+# 重新检查在线玩家白名单的间隔，单位秒，最小1秒。/ Online whitelist recheck interval, seconds; min 1.
 recheck-seconds: 5
+# 未绑定玩家和服务不可用时显示的提示。/ Login rejection and service outage messages.
 denied-message: '请在服主指定的 QQ 群中 @机器人，发送 /绑定 Java 游戏名 或 /绑定 基岩 Xbox昵称'
 unavailable-message: '白名单服务暂时不可用，请稍后重新连接。'
 chat-bridge:
+  # 群服聊天总开关，与白名单独立；需要安装 BungeeChat。/ Chat switch, independent of whitelist; requires BungeeChat.
   enabled: false
+  # 填代理 config.yml 中真实的子服键名。只有这些子服参与互通。/ Exact backend keys from proxy config.yml.
+  # 例如 / Example: [lobby, survival]
   servers: []
-  # QQ official events identify members by member_openid, not their numeric QQ number.
-  # Optional manual aliases: '123456789': 'actual_member_openid'
+  # 可选：数字QQ号 -> 官方 member_openid；仅用于下面的兼容头衔映射。
+  # Optional numeric QQ -> member_openid mapping, used only for legacy title lookup below.
+  # 例 / Example: {'123456789': 'MEMBER_OPENID'}；所有ID建议加引号。/ Quote all IDs.
   qq-identities: {}
-  # Keys may be member_openid directly or a QQ number from qq-identities above.
-  # Example: '123456789': '专属头衔'
-  # Blank values mean no mapped title. Reload with proxy console: qqwl reload
+  # 可选：member_openid 或上方已映射的QQ号 -> 头衔。/ member_openid or mapped QQ number -> title.
+  # 例 / Example: {'MEMBER_OPENID': 'Builder'}；自助 /设置头衔 的值优先。/ Self-service titles take priority.
   qq-titles: {}
-
-# Set features.whitelist explicitly to override legacy enabled.
 word-filter:
+  # 可选敏感词过滤。公开发行版不附带词库，启用前自行提供适配词库。
+  # Optional word filter. Public releases exclude datasets; provide compatible files before enabling.
+  # G79SensitiveWords.json 和 X19SensitiveWords.json 放在此插件数据目录。
+  # Place both files in this plugin data directory and comply with their licenses.
   enabled: false
+  # 额外正则：red 拦截，yellow 替换；留空 [] 不增加规则。/ Extra regex: red blocks, yellow replaces; [] adds none.
+  # 示例 / Example: red: ['(?i)example-blocked-word']
   red: []
   yellow: []

@@ -1,12 +1,45 @@
+# MCQQSpigot 子服配置 / Backend server configuration
+# YAML 使用空格缩进，禁止 Tab。冒号后留一个空格。/ Use spaces, never tabs; add a space after ':'.
+# 本文件位于 plugins/MCQQSpigot/config.yml。修改后重启子服生效。/ Restart this backend after editing.
+# 每个子服有自己的配置；只有 storage 选择同一数据库/表时才共享数据。/ Each backend has its own config.
 features:
+  # 是否允许 /said 和下面的群命令。/ Enable /said and group commands below.
   chat: true
+
+# 自定义命令名 -> QQ 官方 group_openid（不是数字群号）。/ Command name -> official group_openid, NOT QQ group number.
+# 例如把 {} 替换成下方两行，玩家即可 /friends 你好。/ Replace {} with the example to enable /friends hello.
+# group-commands:
+#   friends: 'YOUR_GROUP_OPENID'
+#   staff: 'ANOTHER_GROUP_OPENID'
+# 命令名用英文小写、数字、_ 或 -，不能覆盖已有命令。/ Use lowercase letters, digits, _ or -; avoid conflicts.
+# 所有群必须在机器人 allowed_groups 中；这些命令需要 mcqq.said 权限。/ Targets must be authorized by the bot.
+# /said 发送到全部授权群；自定义命令只发指定群，两者均在游戏中广播。/ /said sends to all groups, aliases to one group.
 group-commands: {}
+
+# 此处仅存储 Spigot Storage API 数据，不会迁移机器人绑定/队列或代理聊天偏好。
+# This stores Spigot Storage API data only; bot bindings/queues and proxy preferences are separate.
+# 改变后端不会自动迁移旧数据。先备份，再迁移。/ Changing backend does not migrate existing data.
 storage:
-  type: yaml # yaml, sql, mongodb
+  # yaml = 本地 data.yml；sql = SQLite/MySQL/PostgreSQL；mongodb = MongoDB。
+  # yaml = local data.yml; sql = SQLite/MySQL/PostgreSQL; mongodb = MongoDB.
+  type: yaml
   sql:
-    url: '' # blank = local SQLite; jdbc:mysql://host/database or jdbc:postgresql://host/database
+    # 仅 type: sql 生效。空字符串使用插件目录 data.db（SQLite）。/ Used only with type: sql; blank = local SQLite.
+    # MySQL 示例 / Example:
+    # 'jdbc:mysql://127.0.0.1:3306/YOUR_DATABASE?useUnicode=true&characterEncoding=UTF-8&connectTimeout=5000&socketTimeout=5000'
+    # PostgreSQL 示例 / Example: 'jdbc:postgresql://127.0.0.1:5432/YOUR_DATABASE?connectTimeout=5&socketTimeout=5'
+    # 数据库应先由管理员创建，插件只创建表。/ Create the database first; the plugin creates only its table.
+    url: ''
+    # 数据库登录账号和密码；不要把真实值提交 Git。/ Database credentials; never commit real values.
     username: ''
     password: ''
+    # SQL 表名，仅允许英文字母/数字/下划线，以字母或下划线开头，最长63字符。
+    # SQL table name: letters/digits/underscores, starting with letter or underscore, max 63 characters.
+    # 多子服使用相同数据库和表名将共享同一组键。/ Same database + table shares keys across backends.
+    table: mcqq_settings
   mongodb:
+    # 仅 type: mongodb 生效。/ Used only with type: mongodb.
+    # 例如 / Example: 'mongodb://USER:PASSWORD@127.0.0.1:27017/?authSource=admin&serverSelectionTimeoutMS=5000'
     uri: ''
+    # 数据库名；集合固定为 settings。/ Database name; collection is settings.
     database: mcqq
