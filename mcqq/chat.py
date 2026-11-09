@@ -7,6 +7,10 @@ from aiohttp import web
 
 
 def register(app, cfg, store, identity, resolve_media):
+    allowed = cfg.get("allowed_groups", [])
+    outbound = cfg.get("chat_bridge", {}).get("outbound_groups", allowed)
+    if not isinstance(outbound, list) or any(g not in allowed for g in outbound):
+        raise ValueError("outbound_groups must be a subset of allowed_groups")
     with store.connect() as db:
         db.executescript("""
             CREATE TABLE IF NOT EXISTS chat_queue (
@@ -28,6 +32,9 @@ def register(app, cfg, store, identity, resolve_media):
 
     def inbound_groups():
         return cfg.get("chat_bridge", {}).get("inbound_groups", groups())
+
+    def outbound_groups():
+        return cfg.get("chat_bridge", {}).get("outbound_groups", groups())
 
     def servers():
         return cfg.get("chat_bridge", {}).get("servers", [])
@@ -92,9 +99,9 @@ def register(app, cfg, store, identity, resolve_media):
                     raise ValueError("name")
                 binding = db.execute("SELECT subject FROM bindings WHERE game_uuid=?", (player_uuid,)).fetchone()
                 target = data.get("group", "")
-                if not isinstance(target, str) or (target and target not in groups()):
+                if not isinstance(target, str) or (target and target not in outbound_groups()):
                     raise web.HTTPForbidden()
-                for group in ([target] if target else groups()):
+                for group in ([target] if target else outbound_groups()):
                     nick = db.execute("SELECT nickname FROM chat_names WHERE subject=? AND group_id=?",
                                       (binding["subject"], group)).fetchone() if binding else None
                     enqueue(db, "qq", group + ":" + event,

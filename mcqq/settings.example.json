@@ -14,6 +14,7 @@
     "rebind_cooldown_seconds": "玩家换绑冷却，单位秒。/ Account rebinding cooldown in seconds.",
     "chat_bridge.servers": "允许互通的代理子服名称数组，必须与代理chat-bridge.servers匹配；空数组关闭转发。/ Backend names participating in chat; match proxy settings; [] disables relay.",
     "chat_bridge.inbound_groups": "允许QQ群消息进入游戏的group_openid数组，必须为allowed_groups子集。[]不接收，省略兼容接收全部授权群。/ Groups allowed to send to game, subset of allowed_groups; []=none; omitted=all authorized.",
+    "chat_bridge.outbound_groups": "允许接收游戏消息的group_openid数组，必须为allowed_groups子集。[]不发送，省略兼容发送到全部授权群；定向群命令同样受限制。/ Groups receiving game messages; []=none; omitted=all authorized; also applies to targeted commands.",
     "chat_bridge.group_aliases": "group_openid到显示群名的映射，例：{\"GROUP_OPENID_A\":\"朋友群\"}。别名优先，其次自动获取群名，最后回退ID。/ Display aliases keyed by group_openid; alias > fetched group name > ID.",
     "media.port": "可选图片回退服务监听端口；0关闭独立媒体监听器。/ Optional image fallback listener port; 0 disables the extra listener.",
     "media.public_base_url": "游戏玩家可访问的图片URL前缀，例：https://images.example.com/mcqq-media；不应填内部API地址。/ Public image base URL reachable by players; not the internal API URL.",
@@ -36,6 +37,7 @@
   "chat_bridge": {
     "servers": [],
     "inbound_groups": [],
+    "outbound_groups": [],
     "group_aliases": {}
   },
   "media": {

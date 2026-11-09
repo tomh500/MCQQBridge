@@ -23,9 +23,11 @@ QQ 官方机器人与 Minecraft 群服互通框架。Java 包与构建 Group ID 
 
 `allowed_groups` 列出授权 group_openid，机器人 `/本群ID` 可获取；数字QQ群号不能用于消息路由。`chat_bridge.inbound_groups` 指定接收到游戏的群，必须属于 allowed_groups；空数组禁止接收，省略兼容旧行为。`chat_bridge.group_aliases` 为 group_openid 到显示别名的映射。
 
+`chat_bridge.outbound_groups` 独立指定接收游戏消息的群，也必须是 `allowed_groups` 的子集；空数组禁止发送，省略则兼容旧行为，发往所有授权群。定向群命令同样受此列表限制；不在列表中的目标会被拒绝。修改机器人配置后需重启 API 和 Bot。
+
 群标签优先采用别名，再尝试官方群信息接口获取群名；无接口权限时降级显示 group_openid。名称缓存一小时，失败缓存五分钟。名称不决定授权范围，未列入接收范围的群不会转发。
 
-`/said 内容` 向所有授权群发送，并在允许的游戏子服广播。子服配置 `group-commands: {friends: "OPENID_A"}` 后，`/friends 内容` 只发送到目标群，同时在游戏内广播；重启生效。命令不能覆盖已有命令，权限为 mcqq.said。目标群仍需在机器人授权列表中。重复空格和标点保留，命令文本不会作为服务端命令执行。
+`/said 内容` 向出站列表中的群发送，并在允许的游戏子服广播。子服配置 `group-commands: {friends: "OPENID_A"}` 后，`/friends 内容` 只发送到目标群，同时在游戏内广播；重启生效。命令不能覆盖已有命令，权限为 mcqq.said。目标群需在授权及出站列表中。重复空格和标点保留，命令文本不会作为服务端命令执行。
 
 ## 配置与数据存取
 

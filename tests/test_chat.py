@@ -74,6 +74,27 @@ class ChatTests(unittest.IsolatedAsyncioTestCase):
         game.update(group="unknown", event_id="bad")
         self.assertEqual((await self.post("from-game", game, True)).status, 403)
 
+    async def test_independent_direction_lists_and_target_restriction(self):
+        self.cfg["allowed_groups"] = ["group", "other"]
+        self.cfg["chat_bridge"].update(inbound_groups=["group"], outbound_groups=["other"])
+        self.assertEqual((await self.post("from-qq", self.qq())).status, 200)
+        game = dict(uuid=PLAYER, name="Steve", server="lobby", event_id="broadcast", text="hello")
+        self.assertEqual((await self.post("from-game", game, True)).status, 200)
+        messages = (await (await self.post("to-qq", {})).json())["messages"]
+        self.assertEqual([m["group"] for m in messages], ["other"])
+        game.update(event_id="blocked", group="group")
+        self.assertEqual((await self.post("from-game", game, True)).status, 403)
+        self.cfg["chat_bridge"]["outbound_groups"] = []
+        game.update(event_id="none", group="")
+        self.assertEqual((await self.post("from-game", game, True)).status, 200)
+        self.assertEqual(len((await (await self.post("to-qq", {})).json())["messages"]), 1)
+
+    async def test_invalid_outbound_configuration_rejected(self):
+        for value in ("group", ["unknown"], None):
+            cfg = dict(self.cfg, chat_bridge={"outbound_groups": value})
+            with self.assertRaises(ValueError):
+                create_app(cfg)
+
     async def test_group_role_is_trusted_bot_metadata(self):
         for role in ("member", "admin", "owner"):
             data = self.qq(role=role)
