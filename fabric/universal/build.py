@@ -109,7 +109,7 @@ def main():
     if tests.exists():shutil.rmtree(tests)
     tests.mkdir(exist_ok=True)
     subprocess.run([executable('javac'),'--release','21','-encoding','UTF-8','-cp',os.pathsep.join([str(classes),str(loader)]),'-d',str(tests),*map(str,(ROOT/'src/test/java').rglob('*.java'))],check=True)
-    for probe in ['DecoderProbe','UniversalProbe']:
+    for probe in ['DecoderProbe','UniversalProbe','ViewerProbe']:
         subprocess.run([executable('java'),'-Djava.awt.headless=true','-cp',os.pathsep.join(map(str,[classes,tests,loader])),'top.luotiany1.mcqq.images.'+probe],check=True)
     (ROOT/'build/compatibility-report.json').write_text(json.dumps({'versions':report,'status':'API declarations and core tests verified; in-game visual acceptance required'},indent=2)+'\n')
     output=ROOT/'build/libs/mcqq-images-1.2.0-beta.1-universal.jar';output.parent.mkdir(exist_ok=True)

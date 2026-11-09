@@ -59,6 +59,8 @@ public final class ChatImageCore {
     private record Hit(int x,int y,int width,int height,URI uri) {}
     private final List<Hit> hits=new ArrayList<>();
     private URI enlarged;
+    private ImageViewer viewer;
+    private int viewerWidth,viewerHeight;
     private final java.util.concurrent.ExecutorService workers = Executors.newFixedThreadPool(2, runnable -> {
         Thread thread = new Thread(runnable, "MCQQ image download"); thread.setDaemon(true); return thread;
     });
@@ -66,7 +68,7 @@ public final class ChatImageCore {
     private static final class Preview {
         final String caption; final long created = System.currentTimeMillis();
         final List<Identifier> frames = new ArrayList<>(); final List<Integer> delays = new ArrayList<>();
-        int width, height; boolean failed;
+        int width, height, originalWidth, originalHeight; boolean failed;
         Preview(String caption) { this.caption = caption; }
         Identifier frame(long time) {
             long duration = delays.stream().mapToInt(Integer::intValue).sum();
@@ -192,6 +194,7 @@ public final class ChatImageCore {
                         client.getTextureManager().register(id,new DynamicTexture(() -> "QQ chat image",pixels));
                         preview.frames.add(id); preview.delays.add(frame.milliseconds());
                         preview.width=image.getWidth(); preview.height=image.getHeight();
+                        preview.originalWidth=frame.originalWidth(); preview.originalHeight=frame.originalHeight();
                     }
                 } catch (Exception failure) { preview.failed=true; }
             });
@@ -274,22 +277,39 @@ public final class ChatImageCore {
     }
     public boolean click(double x,double y,int button) {
         if(button!=0)return false;
-        if(enlarged!=null) { enlarged=null; return true; }
-        for(Hit hit:hits) if(x>=hit.x && x<hit.x+hit.width && y>=hit.y && y<hit.y+hit.height) { enlarged=hit.uri; return true; }
+        if(enlarged!=null) {
+            if(viewer!=null && !viewer.press(x,y,button,viewerWidth,viewerHeight)) { enlarged=null; viewer=null; }
+            return true;
+        }
+        for(Hit hit:hits) if(x>=hit.x && x<hit.x+hit.width && y>=hit.y && y<hit.y+hit.height) {
+            Preview image=previews.get(hit.uri.toString());
+            if(image!=null && image.originalWidth>0 && !image.failed) {
+                enlarged=hit.uri; viewer=new ImageViewer(image.originalWidth,image.originalHeight,new ImageViewer.Rect(hit.x,hit.y,hit.width,hit.height),System.currentTimeMillis());
+            }
+            return true;
+        }
         return false;
     }
-    public void closeViewer() { enlarged=null; hits.clear(); }
-    public void renderViewer(GuiGraphicsExtractor graphics) {
+    public boolean scrollViewer(double x,double y,double amount) {
+        if(viewer==null)return false; viewer.scroll(x,y,amount,viewerWidth,viewerHeight); return true;
+    }
+    public boolean releaseViewer() { if(viewer==null)return false; viewer.release(); return true; }
+    public boolean dismissViewer() { if(viewer==null)return false; viewer=null; enlarged=null; return true; }
+    public void closeViewer() { enlarged=null; viewer=null; hits.clear(); }
+    public void renderViewer(GuiGraphicsExtractor graphics,int mouseX,int mouseY) {
         if(enlarged==null)return;
         Preview image=previews.get(enlarged.toString());
-        if(image==null || image.failed || image.frames.isEmpty()) { enlarged=null; return; }
+        if(image==null || image.failed || image.frames.isEmpty() || viewer==null) { enlarged=null; viewer=null; return; }
         try {
             int width=graphics.guiWidth(), height=graphics.guiHeight();
-            graphics.fill(0,0,width,height,0xC0000000);
-            double factor=Math.min((width-32.0)/image.width,(height-32.0)/image.height);
-            int w=Math.max(1,(int)Math.round(image.width*factor)), h=Math.max(1,(int)Math.round(image.height*factor));
-            drawImage(graphics,image.frame(System.currentTimeMillis()),(width-w)/2,(height-h)/2,w,h,image.width,image.height);
-        } catch(ReflectiveOperationException error) { enlarged=null; System.err.println("[MCQQ Images] Image viewer unavailable: "+error); }
+            viewerWidth=width; viewerHeight=height; viewer.drag(mouseX,mouseY,width,height);
+            long now=System.currentTimeMillis(); graphics.fill(0,0,width,height,((int)(0xB0*viewer.progress(now)))<<24);
+            ImageViewer.Rect viewport=viewer.viewport(width,height), rect=viewer.animated(width,height,now);
+            boolean clipping=viewer.progress(now)>=1;
+            if(clipping)graphics.enableScissor((int)Math.floor(viewport.x()),(int)Math.floor(viewport.y()),(int)Math.ceil(viewport.x()+viewport.width()),(int)Math.ceil(viewport.y()+viewport.height()));
+            try { drawImage(graphics,image.frame(now),(int)Math.round(rect.x()),(int)Math.round(rect.y()),Math.max(1,(int)Math.round(rect.width())),Math.max(1,(int)Math.round(rect.height())),image.width,image.height); }
+            finally { if(clipping)graphics.disableScissor(); }
+        } catch(ReflectiveOperationException error) { enlarged=null; viewer=null; System.err.println("[MCQQ Images] Image viewer unavailable: "+error); }
     }
     // The RenderPipeline class moved packages between 26.2 and 26.3. Resolve
     // the pipeline and blit overload once so one binary works with both.

@@ -14,9 +14,10 @@ OUTPUT=DIST/'mcqq-images-1.2.0-beta.1-all-loaders.jar'
 def main():
     # The Java 21 implementation is bytecode-compatible and is shared with
     # Forge and NeoForge. Never silently merge divergent decoders.
-    a=(ROOT/'fabric/universal/src/main/java/top/luotiany1/mcqq/images/ImageFrames.java').read_text().splitlines()
-    b=(ROOT/'multiloader/src/main/java/top/luotiany1/mcqq/images/ImageFrames.java').read_text().splitlines()
-    if a != b: raise RuntimeError('Image decoders differ; reconcile them before packaging')
+    for shared in ('ImageFrames', 'ImageViewer'):
+        a=(ROOT/f'fabric/universal/src/main/java/top/luotiany1/mcqq/images/{shared}.java').read_text().splitlines()
+        b=(ROOT/f'multiloader/src/main/java/top/luotiany1/mcqq/images/{shared}.java').read_text().splitlines()
+        if a != b: raise RuntimeError(f'{shared} sources differ; reconcile them before packaging')
     entries={}
     for file in (FABRIC,FORGE,NEO):
         with zipfile.ZipFile(file) as jar:
@@ -26,7 +27,7 @@ def main():
                 name=item.filename
                 data=jar.read(item)
                 if name=='META-INF/MANIFEST.MF' and file==NEO: continue
-                if name.startswith('top/luotiany1/mcqq/images/ImageFrames') and file!=FABRIC: continue
+                if any(name.startswith('top/luotiany1/mcqq/images/'+shared) for shared in ('ImageFrames','ImageViewer')) and file!=FABRIC: continue
                 if name in ('META-INF/mods.toml','META-INF/neoforge.mods.toml'):
                     data=data.replace(b'1.2.0-dev',b'1.2.0-beta.1')
                 if name in entries and entries[name]!=data: raise RuntimeError('Conflicting JAR entry: '+name)

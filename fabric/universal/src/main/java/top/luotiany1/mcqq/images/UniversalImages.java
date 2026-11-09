@@ -35,10 +35,12 @@ public final class UniversalImages implements ClientModInitializer {
     private record Hit(int x,int y,int width,int height,URI uri) {}
     private final List<Hit> hits=new ArrayList<>();
     private URI enlarged;
+    private ImageViewer viewer;
+    private int viewerWidth,viewerHeight,mouseX,mouseY;
     static final class Preview {
         final String caption; final long created=System.currentTimeMillis();
         final List<Object> frames=new ArrayList<>(); final List<Integer> delays=new ArrayList<>();
-        int width,height; boolean failed;
+        int width,height,originalWidth,originalHeight; boolean failed;
         Preview(String caption) { this.caption=caption; }
         Object frame(long time) {
             int total=delays.stream().mapToInt(Integer::intValue).sum(); long offset=Math.floorMod(time-created,Math.max(1,total));
@@ -193,7 +195,7 @@ public final class UniversalImages implements ClientModInitializer {
         event("net.fabricmc.fabric.api.client.screen.v1.ScreenEvents","AFTER_INIT",args -> {
             Object screen=args[1];
             if(!bridge.type("net.minecraft.client.gui.screens.ChatScreen").isInstance(screen))return;
-            enlarged=null; hits.clear();
+            enlarged=null; viewer=null; hits.clear();
             try { registerMouse(screen); }
             catch(Exception error) { System.err.println("[MCQQ Images] Image click integration unavailable: "+error); }
             Class<?> owner=Class.forName("net.fabricmc.fabric.api.client.screen.v1.ScreenEvents");
@@ -201,7 +203,9 @@ public final class UniversalImages implements ClientModInitializer {
             for(Method method:owner.getMethods()) if(method.getName().equals(name) && method.getParameterCount()==1) {
                 Object event=method.invoke(null,screen); Class<?> eventType=Class.forName("net.fabricmc.fabric.api.event.Event");
                 Object invoker=eventType.getMethod("invoker").invoke(event); Class<?> type=invoker.getClass().getInterfaces()[0];
-                eventType.getMethod("register",Object.class).invoke(event,callback(type,renderArgs -> render(renderArgs[1]))); return;
+                eventType.getMethod("register",Object.class).invoke(event,callback(type,renderArgs -> {
+                    mouseX=((Number)renderArgs[2]).intValue(); mouseY=((Number)renderArgs[3]).intValue(); render(renderArgs[1]);
+                })); return;
             }
         });
     }
@@ -224,10 +228,44 @@ public final class UniversalImages implements ClientModInitializer {
                     button=((Number)bridge.call(click,"net.minecraft.client.input.MouseButtonEvent","button")).intValue();
                 }
                 if(button!=0)return true;
-                if(enlarged!=null) { enlarged=null; return false; }
-                for(Hit hit:hits) if(x>=hit.x && x<hit.x+hit.width && y>=hit.y && y<hit.y+hit.height) { enlarged=hit.uri; return false; }
+                if(enlarged!=null) {
+                    if(viewer!=null && !viewer.press(x,y,button,viewerWidth,viewerHeight)) { enlarged=null; viewer=null; }
+                    return false;
+                }
+                for(Hit hit:hits) if(x>=hit.x && x<hit.x+hit.width && y>=hit.y && y<hit.y+hit.height) {
+                    Preview image=previews.get(hit.uri.toString());
+                    if(image!=null && image.originalWidth>0 && !image.failed) {
+                        enlarged=hit.uri; viewer=new ImageViewer(image.originalWidth,image.originalHeight,new ImageViewer.Rect(hit.x,hit.y,hit.width,hit.height),System.currentTimeMillis());
+                    }
+                    return false;
+                }
             } catch(Exception error) { System.err.println("[MCQQ Images] Image click unavailable: "+error); }
             return true;
+        });
+        eventType.getMethod("register",Object.class).invoke(event,listener);
+        registerViewerEvent(owner,screen,"allowMouseRelease",args -> { if(viewer==null)return true; viewer.release(); return false; });
+        registerViewerEvent(owner,screen,"allowMouseScroll",args -> {
+            if(viewer==null)return true;
+            viewer.scroll(((Number)args[1]).doubleValue(),((Number)args[2]).doubleValue(),((Number)args[4]).doubleValue(),viewerWidth,viewerHeight); return false;
+        });
+        Class<?> keyboard=Class.forName("net.fabricmc.fabric.api.client.screen.v1.ScreenKeyboardEvents");
+        registerViewerEvent(keyboard,screen,"allowKeyPress",args -> {
+            if(viewer==null)return true;
+            int key=args.length>=4 ? ((Number)args[1]).intValue() : ((Number)bridge.call(args[1],"net.minecraft.client.input.KeyEvent","key")).intValue();
+            if(key==256) { enlarged=null; viewer=null; return false; }
+            return true;
+        });
+    }
+    @FunctionalInterface interface AllowEvent { boolean allow(Object[] args) throws Exception; }
+    private void registerViewerEvent(Class<?> owner,Object screen,String name,AllowEvent body) throws Exception {
+        Method factory=Arrays.stream(owner.getMethods()).filter(m -> m.getName().equals(name) && m.getParameterCount()==1).findFirst().orElseThrow();
+        Object event=factory.invoke(null,screen); Class<?> eventType=Class.forName("net.fabricmc.fabric.api.event.Event");
+        Object invoker=eventType.getMethod("invoker").invoke(event); Class<?> type=invoker.getClass().getInterfaces()[0];
+        Object listener=Proxy.newProxyInstance(type.getClassLoader(),new Class<?>[]{type},(p,m,args) -> {
+            if(m.getDeclaringClass()==Object.class) return switch(m.getName()) {
+                case "toString" -> "MCQQ viewer event"; case "hashCode" -> System.identityHashCode(p); case "equals" -> p==args[0]; default -> null;
+            };
+            try { return body.allow(args); } catch(Exception error) { System.err.println("[MCQQ Images] Viewer input failed: "+error); return true; }
         });
         eventType.getMethod("register",Object.class).invoke(event,listener);
     }
@@ -306,6 +344,7 @@ public final class UniversalImages implements ClientModInitializer {
                         }
                     }
                     preview.width=decoded.getFirst().image().getWidth(); preview.height=decoded.getFirst().image().getHeight();
+                    preview.originalWidth=decoded.getFirst().originalWidth(); preview.originalHeight=decoded.getFirst().originalHeight();
                 } catch(Exception error) { preview.failed=true; System.err.println("[MCQQ Images] Texture upload failed: "+error); }
             });
         } catch(Exception error) { try { bridge.execute(()->preview.failed=true); } catch(Exception ignored) {} }
@@ -372,12 +411,16 @@ public final class UniversalImages implements ClientModInitializer {
             syncLabels(chat,chatClass,scroll);
             if(focused && enlarged!=null) {
                 Preview image=previews.get(enlarged.toString());
-                if(image==null || image.failed || image.frames.isEmpty()) enlarged=null;
+                if(image==null || image.failed || image.frames.isEmpty() || viewer==null) { enlarged=null; viewer=null; }
                 else {
-                    bridge.call(graphics,gc,"fill",0,0,width,height,0xC0000000);
-                    double factor=Math.min((width-32.0)/image.width,(height-32.0)/image.height);
-                    int w=Math.max(1,(int)Math.round(image.width*factor)), h=Math.max(1,(int)Math.round(image.height*factor));
-                    bridge.call(graphics,gc,"blit",pipeline,image.frame(System.currentTimeMillis()),(width-w)/2,(height-h)/2,0f,0f,w,h,image.width,image.height,image.width,image.height);
+                    viewerWidth=width; viewerHeight=height; viewer.drag(mouseX,mouseY,width,height);
+                    long now=System.currentTimeMillis(); int alpha=(int)(0xB0*viewer.progress(now));
+                    bridge.call(graphics,gc,"fill",0,0,width,height,alpha<<24);
+                    ImageViewer.Rect viewport=viewer.viewport(width,height), rect=viewer.animated(width,height,now);
+                    boolean clipping=viewer.progress(now)>=1;
+                    if(clipping) bridge.call(graphics,gc,"enableScissor",(int)Math.floor(viewport.x()),(int)Math.floor(viewport.y()),(int)Math.ceil(viewport.x()+viewport.width()),(int)Math.ceil(viewport.y()+viewport.height()));
+                    try { bridge.call(graphics,gc,"blit",pipeline,image.frame(now),(int)Math.round(rect.x()),(int)Math.round(rect.y()),0f,0f,Math.max(1,(int)Math.round(rect.width())),Math.max(1,(int)Math.round(rect.height())),image.width,image.height,image.width,image.height); }
+                    finally { if(clipping)bridge.call(graphics,gc,"disableScissor"); }
                 }
             }
         } catch(Exception|LinkageError error) {
@@ -420,5 +463,5 @@ public final class UniversalImages implements ClientModInitializer {
         Object manager=bridge.call(bridge.client(),MC,"getTextureManager");
         for(Object id:removed.frames)bridge.call(manager,"net.minecraft.client.renderer.texture.TextureManager","release",id);
     }
-    private void clear() throws Exception { restoreLabels(); for(String key:List.copyOf(previews.keySet()))evict(key); imageMarkers.clear(); labelSlots.clear(); hits.clear(); enlarged=null; }
+    private void clear() throws Exception { restoreLabels(); for(String key:List.copyOf(previews.keySet()))evict(key); imageMarkers.clear(); labelSlots.clear(); hits.clear(); enlarged=null; viewer=null; }
 }

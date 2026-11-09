@@ -14,7 +14,7 @@ CLASSES = {
     'net.minecraft.client.gui.Gui', 'net.minecraft.client.gui.Hud', 'net.minecraft.client.Options', 'net.minecraft.client.OptionInstance',
     'net.minecraft.client.gui.Font', 'net.minecraft.client.gui.components.ChatComponent',
     'net.minecraft.client.gui.screens.ChatScreen', 'net.minecraft.client.GuiMessage$Line',
-    'net.minecraft.client.input.MouseButtonEvent',
+    'net.minecraft.client.input.MouseButtonEvent', 'net.minecraft.client.input.KeyEvent',
     'net.minecraft.util.FormattedCharSequence', 'net.minecraft.util.FormattedCharSink',
     'net.minecraft.network.chat.contents.PlainTextContents',
     'net.minecraft.resources.ResourceLocation',

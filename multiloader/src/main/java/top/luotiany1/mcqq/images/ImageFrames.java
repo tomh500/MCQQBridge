@@ -15,7 +15,7 @@ import javax.imageio.stream.ImageInputStream;
 
 /** Bounded decoding with GIF disposal/compositing; never runs on Minecraft's render thread. */
 public final class ImageFrames {
-    public record Frame(BufferedImage image, int milliseconds) { }
+    public record Frame(BufferedImage image, int milliseconds, int originalWidth, int originalHeight) { }
     private ImageFrames() { }
     public static List<Frame> decode(byte[] data) throws IOException {
         try (ImageInputStream input = ImageIO.createImageInputStream(new ByteArrayInputStream(data))) {
@@ -41,6 +41,9 @@ public final class ImageFrames {
                 if (width <= 0 || height <= 0 || width > 8192 || height > 8192 || (long) width * height > 16_777_216)
                     throw new IOException("Image dimensions too large");
                 int count = gif ? Math.min(48, reader.getNumImages(true)) : 1;
+                // Preserve more detail for zoom while bounding total decoded frame memory.
+                double scale = Math.min(1, Math.min(2048.0 / Math.max(width, height),
+                    Math.sqrt(8_388_608.0 / count / width / height)));
                 BufferedImage canvas = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
                 List<Frame> frames = new ArrayList<>();
                 long pixels = 0;
@@ -63,11 +66,10 @@ public final class ImageFrames {
                     BufferedImage next = reader.read(i);
                     Graphics2D graphics = canvas.createGraphics();
                     graphics.drawImage(next, x, y, null); graphics.dispose();
-                    double scale = Math.min(1, 512.0 / Math.max(width, height));
                     int w = Math.max(1, (int)(width * scale)), h = Math.max(1, (int)(height * scale));
                     pixels += (long)w * h;
                     if (pixels > 8_388_608) break;
-                    frames.add(new Frame(copy(canvas, w, h), delay));
+                    frames.add(new Frame(copy(canvas, w, h), delay, width, height));
                     if (disposal.equals("restoreToBackgroundColor")) {
                         graphics = canvas.createGraphics(); graphics.setComposite(AlphaComposite.Clear);
                         graphics.fillRect(x, y, next.getWidth(), next.getHeight()); graphics.dispose();
