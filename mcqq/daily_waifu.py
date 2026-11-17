@@ -20,9 +20,9 @@ def valid_entry(entry):
     url = entry.get("image_url", "")
     source = entry.get("source_url", "")
     return (isinstance(url, str) and urlparse(url).scheme == "https" and
-            urlparse(url).hostname == "s4.anilist.co" and
-            urlparse(url).path.startswith("/file/anilistcdn/character/large/") and
-            isinstance(source, str) and source.startswith("https://anilist.co/character/"))
+            urlparse(url).hostname == "lain.bgm.tv" and
+            urlparse(url).path.startswith("/pic/crt/l/") and
+            isinstance(source, str) and source.startswith("https://bgm.tv/character/"))
 
 
 class DailyWaifuStorage:
@@ -38,6 +38,7 @@ class DailyWaifuStorage:
         self.redis = redis.Redis.from_url(settings["redis_url"], socket_connect_timeout=2, socket_timeout=2,
                                           decode_responses=True)
         self.fallback = [item for item in json.loads(CATALOG_PATH.read_text(encoding="utf-8")) if valid_entry(item)]
+        self.works = {item["source_url"]: item.get("work", "未知作品") for item in self.fallback}
         if not self.fallback:
             raise ValueError("empty waifu catalog")
 
@@ -47,7 +48,7 @@ class DailyWaifuStorage:
 
     def choose(self, exclude_url=None):
         try:
-            match = {"enabled": True}
+            match = {"enabled": True, "source_url": {"$in": list(self.works)}}
             if exclude_url:
                 match["image_url"] = {"$ne": exclude_url}
             sample = next(self.catalog.aggregate([{"$match": match}, {"$sample": {"size": 1}}],
@@ -62,9 +63,9 @@ class DailyWaifuStorage:
             raise ValueError("no alternate portrait")
         return entries[secrets.randbelow(len(entries))]
 
-    @staticmethod
-    def result(row, *, new=False, exchanged=False):
+    def result(self, row, *, new=False, exchanged=False):
         return {"name": row[0], "image_url": row[1], "source_url": row[2],
+                "work": self.works.get(row[2], "未知作品"),
                 "swapped": bool(row[3]), "draw_token": row[4],
                 "new": new, "exchanged": exchanged}
 
@@ -131,6 +132,16 @@ class DailyWaifuStorage:
                 connection.rollback()
                 raise
 
+    def accept(self, subject, day, token):
+        with self.pymysql.connect(**self.mysql) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("UPDATE daily_waifu_draws SET swapped=1 WHERE subject=%s AND day=%s AND draw_token=%s", (subject, day, token))
+                if cursor.rowcount == 0:
+                    cursor.execute("SELECT 1 FROM daily_waifu_draws WHERE subject=%s AND day=%s AND draw_token=%s", (subject, day, token))
+                    if not cursor.fetchone():
+                        return {"error": "按钮已失效。"}
+        return {"accepted": True}
+
 
 def register(app, cfg, identity, storage=None):
     enabled = cfg.get("daily_waifu", {}).get("enabled", False)
@@ -190,6 +201,21 @@ def register(app, cfg, identity, storage=None):
             return web.json_response({"error": "重置暂时无法使用，请稍后再试。"}, status=503)
         return web.json_response(dict(result, day=day))
 
+    async def accept(request):
+        data = await request.json()
+        subject = identity(data)
+        token = data.get("draw_token")
+        if not enabled or storage is None or not isinstance(token, str) or len(token) != 32:
+            return web.json_response({"error": "按钮已失效。"}, status=400)
+        day = datetime.now(ZoneInfo("Asia/Shanghai")).date().isoformat()
+        try:
+            result = await asyncio.to_thread(storage.accept, subject, day, token)
+        except Exception:
+            log.exception("Daily waifu acceptance unavailable")
+            return web.json_response({"error": "暂时无法确认。"}, status=503)
+        return web.json_response(result)
+
     app.router.add_post("/v1/waifu/today", today)
     app.router.add_post("/v1/waifu/swap", swap)
+    app.router.add_post("/v1/waifu/accept", accept)
     app.router.add_post("/v1/waifu/reset", reset)

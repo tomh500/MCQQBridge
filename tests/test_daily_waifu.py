@@ -17,6 +17,7 @@ from mcqq.bot import QQBot, plain_game_output
 class FakeDailyStorage:
     def __init__(self):
         self.values = {}
+        self.accepted = set()
         self.catalog = json.loads(daily_waifu.CATALOG_PATH.read_text(encoding="utf-8"))
         self.entry = self.catalog[0]
         self.resets = set()
@@ -34,10 +35,18 @@ class FakeDailyStorage:
             return {"error": "请先抽取。"}
         if token is not None and token != "a" * 32:
             return {"error": "按钮已失效。"}
+        if key in self.accepted:
+            return dict(self.values[key], swapped=True, exchanged=False, new=False, draw_token="a" * 32)
         fresh = self.values[key] == self.catalog[0]
         self.values[key] = self.catalog[1]
         self.swapped.add(key)
         return dict(self.values[key], swapped=True, exchanged=fresh, new=False, draw_token="a" * 32)
+
+    def accept(self, subject, day, token):
+        if (subject, day) not in self.values or token != "a" * 32:
+            return {"error": "按钮已失效。"}
+        self.accepted.add((subject, day))
+        return {"accepted": True}
 
     def reset_all(self, day, event):
         if event in self.resets:
@@ -50,6 +59,23 @@ class FakeDailyStorage:
 
 
 class DailyWaifuTests(unittest.IsolatedAsyncioTestCase):
+    async def test_accept_locks_current_choice(self):
+        app = web.Application()
+        storage = FakeDailyStorage()
+        daily_waifu.register(app, {"daily_waifu": {"enabled": True}}, lambda d: d["member_openid"], storage=storage)
+        client = TestClient(TestServer(app))
+        await client.start_server()
+        try:
+            data = {"member_openid": "user", "draw_token": "a" * 32}
+            first = await (await client.post('/v1/waifu/today', json=data)).json()
+            accepted = await (await client.post('/v1/waifu/accept', json=data)).json()
+            after = await (await client.post('/v1/waifu/swap', json=data)).json()
+            self.assertTrue(accepted['accepted'])
+            self.assertFalse(after['exchanged'])
+            self.assertEqual(first['image_url'], after['image_url'])
+        finally:
+            await client.close()
+
     async def test_daily_assignment_is_stable_per_member_across_groups(self):
         app = web.Application()
         storage = FakeDailyStorage()
@@ -112,16 +138,19 @@ class DailyWaifuTests(unittest.IsolatedAsyncioTestCase):
         card = dict(data["self_entry"], day="2026-11-17", draw_token="a" * 32,
                     member_openid="member", new=True, swapped=False)
         await bot.send_waifu_card("group", card, msg_id="first", show_swap=True)
-        self.assertEqual(bot.api.post_group_message.await_count, 2)
+        self.assertEqual(bot.api.post_group_message.await_count, 1)
         button_call = bot.api.post_group_message.await_args.kwargs
         self.assertEqual(button_call["msg_type"], 2)
         buttons = button_call["keyboard"]["content"]["rows"][0]["buttons"]
-        self.assertEqual([item["render_data"]["label"] for item in buttons], ["🔄 换老婆"])
+        self.assertEqual([item["render_data"]["label"] for item in buttons], ["🔄换老婆", "✅就这个了!"])
+        self.assertIn(card["image_url"], button_call["markdown"]["content"])
+        self.assertIn(card["work"], button_call["markdown"]["content"])
+        self.assertEqual(button_call["keyboard"]["content"]["rows"][1]["buttons"][0]["action"]["data"], "/今日老婆")
         self.assertTrue(buttons[0]["action"]["data"].startswith("waifu_swap:"))
         bot.api.post_group_message.reset_mock()
         await bot.send_waifu_card("group", dict(card, new=False), msg_id="repeat", show_swap=True)
         self.assertEqual(bot.api.post_group_message.await_count, 1)
-        self.assertEqual(bot.api.post_group_message.await_args.kwargs["msg_type"], 7)
+        self.assertEqual(bot.api.post_group_message.await_args.kwargs["msg_type"], 2)
 
     async def test_exchange_button_is_bound_to_original_member(self):
         bot = QQBot.__new__(QQBot)

@@ -197,34 +197,29 @@ class QQBot(botpy.Client):
             await self.api.post_group_message(group_openid=group, msg_type=0, content=data["error"],
                 **({"msg_id": msg_id} if msg_id else {"event_id": event_id}))
             return
-        if data.get("exchanged"):
-            caption = "【今日老婆｜已换一次】\n" + data["name"]
-        elif data.get("swapped"):
-            caption = "【今天还是这位老婆｜已换过】\n" + data["name"]
-        else:
-            caption = ("【今日老婆】" if data.get("new") else "【今天还是这位老婆】") + "\n" + data["name"]
+        member = data.get("member_openid", "")
+        mention = f"<qqbot-at-user id=\"{member}\" />" if re.fullmatch(r"[A-Fa-f0-9]{32}", member) else ""
+        name = re.sub(r"[\[\]<>\n\r]", "", data["name"])
+        work = re.sub(r"[\[\]<>\n\r]", "", data.get("work") or "未知作品")
+        text = "本次免费更换，你的新老婆名字叫" if data.get("exchanged") else "你的今日老婆名字叫"
+        caption = f"![角色 #100px #150px]({data['image_url']})\n{mention}，{text}：{name}\n> 来自：{work}"
         reference = {"msg_id": msg_id} if msg_id else {"event_id": event_id}
-        try:
-            portrait = await self.api.post_group_file(group_openid=group, file_type=1, url=data["image_url"])
-            await self.api.post_group_message(group_openid=group, msg_type=7,
-                content=caption, media=portrait, msg_seq=1, **reference)
-        except Exception as exc:
-            log.warning("QQ portrait delivery unavailable (%s); using source link", type(exc).__name__)
-            await self.api.post_group_message(group_openid=group, msg_type=0,
-                content=caption + "\n图片：" + data["image_url"], msg_seq=1, **reference)
+        rows = []
         if show_swap and data.get("new") and not data.get("swapped") and msg_id:
-            action = self.waifu_button_data(group, data["member_openid"], data["day"], data["draw_token"])
-            keyboard = {"content": {"rows": [{"buttons": [{"id": "waifu_swap", "render_data": {
-                "label": "🔄 换老婆", "visited_label": "🔄 换老婆", "style": 1},
-                "action": {"type": 1, "permission": {"type": 2}, "data": action}}]}]}}
-            try:
-                await self.api.post_group_message(group_openid=group, msg_type=2,
-                    content="今天还可换一次。", markdown={"content": "今天还可换一次。"},
-                    keyboard=keyboard, msg_id=msg_id, msg_seq=2)
-            except Exception as exc:
-                log.warning("QQ waifu button unavailable (%s); using text fallback", type(exc).__name__)
-                await self.api.post_group_message(group_openid=group, msg_type=0,
-                    content="今天还可换一次：发送 /换老婆。", msg_id=msg_id, msg_seq=2)
+            action = self.waifu_button_data(group, member, data["day"], data["draw_token"])
+            rows.append({"buttons": [
+                {"id": "waifu_swap", "render_data": {"label": "🔄换老婆", "visited_label": "🔄换老婆", "style": 1},
+                 "action": {"type": 1, "permission": {"type": 2}, "data": action}},
+                {"id": "waifu_accept", "render_data": {"label": "✅就这个了!", "visited_label": "✅就这个了!", "style": 1},
+                 "action": {"type": 1, "permission": {"type": 2}, "data": action.replace("waifu_swap:", "waifu_accept:", 1)}}]})
+        rows.append({"buttons": [{"id": "waifu_draw", "render_data": {"label": "🍀我也要抽!", "visited_label": "🍀我也要抽!", "style": 0},
+            "action": {"type": 2, "permission": {"type": 2}, "data": "/今日老婆", "enter": True}}]})
+        try:
+            await self.api.post_group_message(group_openid=group, msg_type=2,
+                markdown={"content": caption}, keyboard={"content": {"rows": rows}}, msg_seq=1, **reference)
+        except Exception as exc:
+            # A timeout may mean QQ accepted the card; retrying can duplicate it.
+            log.warning("QQ waifu card delivery failed or is uncertain (%s)", type(exc).__name__)
 
     async def daily_waifu_reply(self, message, action="today"):
         group = str(getattr(message, "group_openid", "") or "")
@@ -543,6 +538,19 @@ class QQBot(botpy.Client):
         member = str(getattr(interaction, "group_member_openid", "") or "")
         data = getattr(getattr(interaction, "data", None), "resolved", None)
         button = str(getattr(data, "button_data", "") or "")
+        if button.startswith("waifu_accept:"):
+            match = re.fullmatch(r"waifu_accept:(\d{4}-\d{2}-\d{2}):([a-f0-9]{32}):([a-f0-9]{24})", button)
+            signed = button.replace("waifu_accept:", "waifu_swap:", 1)
+            if not group or not member or not match or match.group(1) != datetime.now(ZoneInfo("Asia/Shanghai")).date().isoformat() or not hmac.compare_digest(signed, self.waifu_button_data(group, member, match.group(1), match.group(2))):
+                await self.api.on_interaction_result(interaction.id, 4)
+                return
+            try:
+                result = await self.call_service("/v1/waifu/accept", {"app_id": self.settings["app_id"], "group_openid": group, "member_openid": member, "draw_token": match.group(2)})
+                await self.api.on_interaction_result(interaction.id, 1 if "error" in result else 0)
+            except Exception:
+                log.exception("QQ waifu acceptance failed")
+                await self.api.on_interaction_result(interaction.id, 1)
+            return
         if button.startswith("waifu_swap:"):
             match = re.fullmatch(r"waifu_swap:(\d{4}-\d{2}-\d{2}):([a-f0-9]{32}):([a-f0-9]{24})", button)
             if not group or not member or not match or match.group(1) != datetime.now(ZoneInfo("Asia/Shanghai")).date().isoformat() or not hmac.compare_digest(
@@ -554,6 +562,7 @@ class QQBot(botpy.Client):
                 result = await self.call_service("/v1/waifu/swap", {
                     "app_id": self.settings["app_id"], "group_openid": group,
                     "member_openid": member, "draw_token": match.group(2)})
+                result["member_openid"] = member
                 await self.api.on_interaction_result(interaction.id, 0)
                 acknowledged = True
                 await self.send_waifu_card(group, result, event_id=interaction.id)
