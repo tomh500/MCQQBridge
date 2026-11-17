@@ -2,10 +2,12 @@ import json
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import tempfile
+import sqlite3
+from contextlib import contextmanager
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
@@ -59,6 +61,58 @@ class FakeDailyStorage:
 
 
 class DailyWaifuTests(unittest.IsolatedAsyncioTestCase):
+    async def test_points_commands_parse_self_and_signed_adjustment(self):
+        bot = QQBot.__new__(QQBot)
+        bot.settings = {'app_id': 'app', 'allowed_groups': ['group'], 'chat_bridge': {'command_groups': ['group']}}
+        bot.seen = {}
+        bot.call_service = AsyncMock(return_value={'points': 7})
+        bot.reply_group_text = AsyncMock()
+        author = SimpleNamespace(member_openid='member', bot=False)
+        message = SimpleNamespace(id='one', group_openid='group', author=author, content='/今日老婆 积分点 查询 ignored', attachments=[])
+        await bot.on_group_message_create(message)
+        payload = bot.call_service.await_args.args[1]
+        self.assertEqual(payload['action'], 'query')
+        self.assertNotIn('target_member_openid', payload)
+        self.assertNotIn('amount', payload)
+        target = 'A' * 32
+        message.id, message.content = 'two', '/今日老婆 积分点 添加 <@' + target + '> -12'
+        await bot.on_group_message_create(message)
+        payload = bot.call_service.await_args.args[1]
+        self.assertEqual((payload['target_member_openid'], payload['amount']), (target, -12))
+
+    async def test_points_authorization_is_enforced_by_api(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / 'roles.db'
+            @contextmanager
+            def connect():
+                db = sqlite3.connect(path)
+                db.row_factory = sqlite3.Row
+                try:
+                    with db:
+                        yield db
+                finally:
+                    db.close()
+            with connect() as db:
+                db.execute('CREATE TABLE bot_role_admins(member_openid TEXT PRIMARY KEY, active INTEGER)')
+                db.execute('INSERT INTO bot_role_admins VALUES (?,?)', ('manager', 1))
+            app = web.Application()
+            economy = SimpleNamespace(points=MagicMock(return_value={'points': 5}))
+            daily_waifu.register(app, {'daily_waifu': {'enabled': True}, 'bot_roles': {'owners': ['owner']}},
+                                 lambda d: 'app:' + d['member_openid'], storage=FakeDailyStorage(),
+                                 role_store=SimpleNamespace(connect=connect), economy=economy)
+            client = TestClient(TestServer(app))
+            await client.start_server()
+            try:
+                req = {'member_openid': 'member', 'action': 'query', 'event_id': 'a'}
+                self.assertEqual((await (await client.post('/v1/waifu/points', json=req)).json())['points'], 5)
+                req.update(target_member_openid='victim', action='set', amount=10)
+                self.assertEqual((await client.post('/v1/waifu/points', json=req)).status, 403)
+                req.update(member_openid='manager')
+                self.assertEqual((await client.post('/v1/waifu/points', json=req)).status, 200)
+                self.assertEqual(economy.points.call_count, 2)
+            finally:
+                await client.close()
+
     async def test_accept_locks_current_choice(self):
         app = web.Application()
         storage = FakeDailyStorage()
@@ -132,6 +186,7 @@ class DailyWaifuTests(unittest.IsolatedAsyncioTestCase):
     async def test_first_draw_has_one_exchange_button_repeat_has_none(self):
         bot = QQBot.__new__(QQBot)
         bot.settings = {"bot_token": "secret" * 8}
+        bot.waifu_images = SimpleNamespace(resolve=AsyncMock(return_value="qqbot-media://image/v1/test"))
         bot.api = SimpleNamespace(post_group_file=AsyncMock(return_value={"file_info": "test"}),
                                   post_group_message=AsyncMock())
         data = dict(self_entry=json.loads(daily_waifu.CATALOG_PATH.read_text(encoding="utf-8"))[0])
@@ -143,9 +198,12 @@ class DailyWaifuTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(button_call["msg_type"], 2)
         buttons = button_call["keyboard"]["content"]["rows"][0]["buttons"]
         self.assertEqual([item["render_data"]["label"] for item in buttons], ["🔄换老婆", "✅就这个了!"])
-        self.assertIn(card["image_url"], button_call["markdown"]["content"])
+        self.assertIn("qqbot-media://image/v1/test", button_call["markdown"]["content"])
         self.assertIn(card["work"], button_call["markdown"]["content"])
         self.assertEqual(button_call["keyboard"]["content"]["rows"][1]["buttons"][0]["action"]["data"], "/今日老婆")
+        wish = button_call["keyboard"]["content"]["rows"][2]["buttons"][0]["action"]
+        self.assertEqual(wish["data"], "/今日老婆 许愿 ")
+        self.assertFalse(wish["enter"])
         self.assertTrue(buttons[0]["action"]["data"].startswith("waifu_swap:"))
         bot.api.post_group_message.reset_mock()
         await bot.send_waifu_card("group", dict(card, new=False), msg_id="repeat", show_swap=True)

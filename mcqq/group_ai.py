@@ -15,6 +15,7 @@ import aiohttp
 import yaml
 
 from . import media
+from .feature_policy import FeaturePolicy
 
 MAX_IMAGE_BYTES = 200 * 1024 * 1024
 
@@ -137,6 +138,7 @@ class GroupAI:
         self.history = History(settings["database"], Path(settings["database"]).parent / "group-ai-images")
         self.locks = {}
         self.unavailable_until = 0
+        self.feature_policy = FeaturePolicy(settings)
         self.filter = self._load_filter(settings)
 
     @staticmethod
@@ -222,6 +224,8 @@ class GroupAI:
             messages.extend({"role": "assistant" if member == "__bot__" else "user",
                              "content": ("" if member == "__bot__" else (name or "群友" + hashlib.sha256(member.encode()).hexdigest()[:6]) + "：") + text[:300] + (" [附有图片]" if image else "")}
                             for member, text, image, name in past if text or image)
+            if not self.feature_policy.check(group, 'llm', consume=False)['allowed']:
+                return '维护中暂不可用。'
             try:
                 answer = await self.complete(messages, max_tokens=int(self.config.get("max_tokens", 500)))
             except (aiohttp.ClientError, asyncio.TimeoutError, ValueError, KeyError, IndexError):
@@ -256,6 +260,8 @@ class GroupAI:
             content = "\n".join(
                 ("Bot" if member == "__bot__" else labels.get(member, "其他群友") + "(" + display.get(member, "群友") + ")")
                 + "：" + text[:350] for member, text, _, _ in rows)[-18000:]
+            if not self.feature_policy.check(group, 'llm', consume=False)['allowed']:
+                return '维护中暂不可用。'
             try:
                 summary = await self.complete([
                     {"role": "system", "content": self.config.get("system_prompt", "")[:8000]},

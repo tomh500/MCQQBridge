@@ -23,6 +23,7 @@ from . import status_bot
 from . import system_info
 from . import reply_controls
 from .waifu_images import PortraitMaterials
+from .feature_policy import FeaturePolicy
 from .group_ai import GroupAI
 
 
@@ -214,15 +215,19 @@ class QQBot(botpy.Client):
         caption = (f"![角色 #100px #150px]({portrait_url})\n" if portrait_url else "") + f"{mention}，{text}：{name}\n> 来自：{work}"
         reference = {"msg_id": msg_id} if msg_id else {"event_id": event_id}
         rows = []
-        if show_swap and data.get("new") and not data.get("swapped") and msg_id:
+        if msg_id or event_id:
             action = self.waifu_button_data(group, member, data["day"], data["draw_token"])
-            rows.append({"buttons": [
-                {"id": "waifu_swap", "render_data": {"label": "🔄换老婆", "visited_label": "🔄换老婆", "style": 1},
-                 "action": {"type": 1, "permission": {"type": 2}, "data": action}},
-                {"id": "waifu_accept", "render_data": {"label": "✅就这个了!", "visited_label": "✅就这个了!", "style": 1},
-                 "action": {"type": 1, "permission": {"type": 2}, "data": action.replace("waifu_swap:", "waifu_accept:", 1)}}]})
+            buttons = []
+            if show_swap and data.get("new") and not data.get("swapped") and msg_id:
+                buttons.append({"id": "waifu_swap", "render_data": {"label": "🔄换老婆", "visited_label": "🔄换老婆", "style": 1},
+                    "action": {"type": 1, "permission": {"type": 2}, "data": action}})
+            buttons.append({"id": "waifu_accept", "render_data": {"label": "✅就这个了!", "visited_label": "✅就这个了!", "style": 1},
+                "action": {"type": 1, "permission": {"type": 2}, "data": action.replace("waifu_swap:", "waifu_accept:", 1)}})
+            rows.append({"buttons": buttons})
         rows.append({"buttons": [{"id": "waifu_draw", "render_data": {"label": "🍀我也要抽!", "visited_label": "🍀我也要抽!", "style": 0},
             "action": {"type": 2, "permission": {"type": 2}, "data": "/今日老婆", "enter": True}}]})
+        rows.append({"buttons": [{"id": "waifu_wish", "render_data": {"label": "✨许愿", "visited_label": "✨许愿", "style": 1},
+            "action": {"type": 2, "permission": {"type": 2}, "data": "/今日老婆 许愿 ", "enter": False}}]})
         try:
             await self.api.post_group_message(group_openid=group, msg_type=2,
                 markdown={"content": caption}, keyboard={"content": {"rows": rows}}, msg_seq=1, **reference)
@@ -542,11 +547,38 @@ class QQBot(botpy.Client):
     async def on_group_at_message_create(self, message):
         await self.on_group_message_create(message, explicit_at=True)
 
+    def feature_rules(self):
+        policy = getattr(self, '_feature_policy', None)
+        if policy is None:
+            self._feature_policy = policy = FeaturePolicy(self.settings)
+        return policy
+
+    async def feature_check(self, group, category, *, consume=True):
+        try:
+            return await asyncio.to_thread(self.feature_rules().check, group, category, consume=consume)
+        except Exception:
+            log.exception('Feature policy check failed')
+            return {'allowed': False, 'reason': 'rate'}
+
+    @staticmethod
+    def feature_closed_text(result):
+        following = result.get('next')
+        return ('该功能当前不可用，下次开放：' + following.strftime('%m月%d日 %H:%M') + '。') if following else '该功能维护中，暂不可用。'
+
     async def on_interaction_create(self, interaction):
         group = str(getattr(interaction, "group_openid", "") or "")
         member = str(getattr(interaction, "group_member_openid", "") or "")
         data = getattr(getattr(interaction, "data", None), "resolved", None)
         button = str(getattr(data, "button_data", "") or "")
+        category = self.feature_rules().category_for(button, button=True)
+        if category:
+            verdict = await self.feature_check(group, category, consume=not button.startswith('waifu_accept:'))
+            if not verdict['allowed']:
+                await self.api.on_interaction_result(interaction.id, 0)
+                if verdict.get('reason') == 'closed':
+                    await self.api.post_group_message(group_openid=group, msg_type=0,
+                        content=self.feature_closed_text(verdict), event_id=interaction.id)
+                return
         if button.startswith("waifu_accept:"):
             match = re.fullmatch(r"waifu_accept:(\d{4}-\d{2}-\d{2}):([a-f0-9]{32}):([a-f0-9]{24})", button)
             signed = button.replace("waifu_accept:", "waifu_swap:", 1)
@@ -554,7 +586,7 @@ class QQBot(botpy.Client):
                 await self.api.on_interaction_result(interaction.id, 4)
                 return
             try:
-                result = await self.call_service("/v1/waifu/accept", {"app_id": self.settings["app_id"], "group_openid": group, "member_openid": member, "draw_token": match.group(2)})
+                result = await self.call_service("/v1/waifu/accept", {"app_id": self.settings["app_id"], "group_openid": group, "member_openid": member, "draw_token": match.group(2), "event_id": interaction.id})
                 await self.api.on_interaction_result(interaction.id, 1 if "error" in result else 0)
             except Exception:
                 log.exception("QQ waifu acceptance failed")
@@ -625,6 +657,19 @@ class QQBot(botpy.Client):
         member = str(getattr(getattr(message, "author", None), "member_openid", "") or "")
         allowed = self.settings.get("chat_bridge", {}).get("command_groups", self.settings.get("allowed_groups", []))
         group_ai = getattr(self, "group_ai", None)
+        if group in allowed and member:
+            if (explicit_at and text and not text.startswith('/')) or (not already_seen and text == '/历史讯息向量化'):
+                verdict = await self.feature_check(group, 'llm', consume=False)
+                if not verdict['allowed']:
+                    await self.reply_group_text(message, '维护中暂不可用。')
+                    return
+            category = self.feature_rules().category_for(text)
+            if category and not already_seen:
+                verdict = await self.feature_check(group, category)
+                if not verdict['allowed']:
+                    if verdict.get('reason') == 'closed':
+                        await self.reply_group_text(message, self.feature_closed_text(verdict))
+                    return
         if already_seen:
             if group_ai and explicit_at and group in allowed and member and text and not text.startswith("/"):
                 checked = group_ai.check(text)
@@ -647,6 +692,47 @@ class QQBot(botpy.Client):
                 return
         if re.fullmatch(r"/今日老婆\s+重置", text):
             await self.daily_waifu_reset(message)
+            return
+        wish = re.fullmatch(r"/今日老婆\s+许愿\s+(.+)", text)
+        if wish:
+            if group not in self.settings.get('allowed_groups', []) or group not in allowed or not member or not getattr(message, 'id', None):
+                await self.reply_group_text(message, '本群尚未开放此指令，或缺少 QQ 官方身份。')
+                return
+            try:
+                data = await self.call_service('/v1/waifu/wish', {'app_id': self.settings['app_id'], 'group_openid': group, 'member_openid': member, 'event_id': message.id, 'keyword': wish.group(1)})
+                data['member_openid'] = member
+                await self.send_waifu_card(group, data, msg_id=message.id, show_swap=True)
+            except (aiohttp.ClientError, asyncio.TimeoutError, ValueError, KeyError):
+                await self.reply_group_text(message, '许愿暂时不可用。')
+            return
+        points = re.fullmatch(r"/今日老婆\s+积分点\s+(查询|添加|设为)(?:\s+([\s\S]*))?", text)
+        if points:
+            if group not in self.settings.get('allowed_groups', []) or group not in allowed or not member or not getattr(message, 'id', None):
+                await self.reply_group_text(message, '本群尚未开放此指令，或缺少 QQ 官方身份。')
+                return
+            op = {'查询': 'query', '添加': 'add', '设为': 'set'}[points.group(1)]
+            tail = (points.group(2) or '').strip()
+            pieces = tail.split()
+            target = mentioned_member(message, pieces[0]) if pieces and pieces[0].startswith(('@', '<@')) else None
+            if op != 'query' and (not target or len(pieces) != 2 or not re.fullmatch(r'-?[0-9]{1,10}', pieces[1]) or (op == 'set' and pieces[1].startswith('-'))):
+                await self.reply_group_text(message, '格式：/今日老婆 积分点 添加|设为 @成员 数字')
+                return
+            if target is None and pieces and pieces[0].startswith(('@', '<@')):
+                await self.reply_group_text(message, '请使用 QQ 的 @成员。')
+                return
+            payload = {'app_id': self.settings['app_id'], 'group_openid': group, 'member_openid': member, 'event_id': message.id, 'action': op}
+            if target:
+                payload['target_member_openid'] = target
+            if op != 'query':
+                payload['amount'] = int(pieces[1])
+            try:
+                result = await self.call_service('/v1/waifu/points', payload)
+                await self.reply_group_text(message, str(result.get('points')) if 'points' in result else result.get('error', '暂时不可用。'))
+            except (aiohttp.ClientError, asyncio.TimeoutError, ValueError, KeyError):
+                await self.reply_group_text(message, '暂时不可用。')
+            return
+        if re.match(r"^/今日老婆(?:\s|$)", text) and not re.fullmatch(r"/今日老婆", text):
+            await self.reply_group_text(message, '指令格式不正确。')
             return
         if re.fullmatch(r"/今日老婆", text):
             await self.daily_waifu_reply(message)

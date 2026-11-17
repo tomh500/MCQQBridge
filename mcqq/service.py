@@ -142,7 +142,7 @@ def create_app(cfg, resolver=resolve, *, status_clock=None, status_monotonic=Non
     from . import remote_commands
     remote_commands.register(app, cfg, store, identity)
     from . import daily_waifu
-    daily_waifu.register(app, cfg, identity)
+    daily_waifu.register(app, cfg, identity, role_store=store)
     from . import titles
     titles.register(app, cfg, store, identity)
     server_status.register(app, cfg, identity, clock=status_clock, monotonic=status_monotonic)

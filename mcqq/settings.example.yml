@@ -1,0 +1,41 @@
+# QQ 机器人配置示例；复制为 settings.yml 后填写。请勿公开凭据。
+# 官方群标识使用 group_openid，不是数字群号。
+app_id: ''
+app_secret: ''
+allowed_groups: []
+group_number: ''
+database: data/bindings.db
+listen_host: 127.0.0.1
+listen_port: 18765
+service_url: http://127.0.0.1:18765
+bot_token: ''
+proxy_token: ''
+afterglow_connection: bridge.json
+rebind_cooldown_seconds: 60
+chat_bridge:
+  servers: []
+  inbound_groups: []
+  group_aliases: {}
+  command_targets: []
+  outbound_groups: []
+  command_groups: []
+bot_roles:
+  owners: []
+  admins: []
+daily_waifu:
+  enabled: false
+  credentials_file: .private-daily-waifu.json
+# 按 group_openid 设置；示例见 README。开放时段采用北京时间。
+feature_policy:
+  groups: {}
+  holiday_ranges: {}
+group_ai_config: group-ai.yml
+group_ai_word_filter: ''
+media:
+  port: 0
+  public_base_url: ''
+features:
+  private_ai: false
+launcher_groups: {}
+# 需要显示动态状态的群，填写授权的 group_openid。
+scheduled_panel_groups: []

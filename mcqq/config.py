@@ -1,14 +1,26 @@
 import json
 import os
 from pathlib import Path
+import yaml
+
+
+def read_mapping(path):
+    path = Path(path)
+    text = path.read_text(encoding='utf-8-sig')
+    value = yaml.safe_load(text) if path.suffix.lower() in ('.yml', '.yaml') else json.loads(text)
+    if not isinstance(value, dict):
+        raise ValueError(f'Configuration must be a mapping: {path}')
+    return value
 
 
 def load():
-    path = Path(os.environ.get("MCQQ_SETTINGS", str(Path(__file__).resolve().parents[1] / "settings.json"))).resolve()
-    cfg = json.loads(path.read_text(encoding="utf-8-sig"))
+    root = Path(__file__).resolve().parents[1]
+    default = next((root / name for name in ('settings.yml', 'settings.yaml', 'settings.json') if (root / name).is_file()), root / 'settings.yml')
+    path = Path(os.environ.get("MCQQ_SETTINGS", str(default))).resolve()
+    cfg = read_mapping(path)
     daily = cfg.get("daily_waifu", {})
     if daily.get("enabled") and daily.get("credentials_file"):
-        credentials = json.loads((path.parent / daily["credentials_file"]).read_text(encoding="utf-8"))
+        credentials = read_mapping(path.parent / daily["credentials_file"])
         daily.update(credentials)
     if os.environ.get("MCQQ_STATUS_REPORTER_TOKEN"):
         cfg["status_reporter_token"] = os.environ["MCQQ_STATUS_REPORTER_TOKEN"]

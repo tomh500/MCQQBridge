@@ -2,8 +2,14 @@
 __pycache__/
 *.pyc
 settings.json
+settings.yml
+settings.yaml
+settings.yml.bak-*
+settings.yaml.bak-*
 settings.json.bak-*
 bridge.json
+bridge.yml
+bridge.yaml
 .env
 *.db*
 *.log
@@ -36,6 +42,9 @@ test-sandbox/
 
 # Private runtime credentials and model configuration
 .private-*.json
+.private-*.yml
+.private-*.yaml
+.test-venv/
 group-ai.yml
 group-ai-images/
 backups/

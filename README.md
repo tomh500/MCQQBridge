@@ -9,7 +9,7 @@ QQ 官方机器人与 Minecraft 群服互通框架。Java 包与构建 Group ID 
 - `spigot`：Spigot 1.12.2+ 子服插件 MCQQSpigot；保留 `/said`，支持按群注册命令，提供异步存取接口。
 - `fabric`：可选图片客户端，[通用 Fabric 源码与构建说明](fabric/universal/README.md)；26.2、26.3 为重点支持版本，旧版为 legacy support。Forge 和 NeoForge 原生支持正在开发。
 
-首次使用复制 `settings.example.json` 为 `settings.json`，填写自己的 QQ app_id、app_secret 和两个不同的随机服务 token（各至少32字符），安装 requirements.txt 后分别运行 `python -m mcqq.service` 与 `python -m mcqq.bot`。配置路径可由 `MCQQ_SETTINGS` 指定，相对路径以配置文件目录为基准。代理的 service-url 和 proxy-token 必须匹配；远程 API 使用 HTTPS 或 SSH 隧道。不要公开凭据、数据库和签名私钥。
+首次使用复制 `settings.example.yml` 为 `settings.yml`，填写自己的 QQ app_id、app_secret 和两个不同的随机服务 token（各至少32字符），安装 requirements.txt 后分别运行 `python -m mcqq.service` 与 `python -m mcqq.bot`。配置路径可由 `MCQQ_SETTINGS` 指定，相对路径以配置文件目录为基准。已有 JSON 仍受支持；未指定路径时优先读取 YAML。纯数字的 AppID、QQ 群号和其他标识请加引号，以免 YAML 将它们解析为数字。代理的 service-url 和 proxy-token 必须匹配；不要公开凭据、数据库和签名私钥。
 
 公开模板没有任何服主凭据、固定群号或默认互通子服。机器人需要自行申请官方消息权限和主动推送额度。
 
@@ -33,11 +33,11 @@ QQ 开放平台 / QQ 群
           └── Spigot/Paper 子服 B …
 ```
 
-`settings.json` 只供 Python API 与机器人使用；BungeeCord 的 `plugins/MCQQBridge/config.yml` 需要使用相同的 `service-url` 和 `proxy-token`。每个子服安装 MCQQSpigot 后可用 `/said`（或 `group-commands` 中配置的别名）发送消息。不要把运行配置、SQLite 数据库、日志、备份、SSH 私钥或任何群 openid 提交到仓库。
+`settings.yml` 只供 Python API 与机器人使用；BungeeCord 的 `plugins/MCQQBridge/config.yml` 需要使用相同的 `service-url` 和 `proxy-token`。每个子服安装 MCQQSpigot 后可用 `/said`（或 `group-commands` 中配置的别名）发送消息。不要把运行配置、SQLite 数据库、日志、备份、SSH 私钥或任何群 openid 提交到仓库。
 
 ### 推荐启动顺序
 
-1. 从 `settings.example.json` 生成仅属于自己的 `settings.json`，填入 QQ 开放平台凭据与两枚不同的随机 token。
+1. 从 `settings.example.yml` 生成仅属于自己的 `settings.yml`，填入 QQ 开放平台凭据与两枚不同的随机 token。
 2. 启动 `python -m mcqq.service`，并确认 `http://127.0.0.1:18765/healthz` 返回成功。
 3. 启动 `python -m mcqq.bot`，确认机器人在 QQ 平台上线。
 4. 配置并启动子服，再启动 BungeeCord；BungeeCord 加载 MCQQBridge 后开始轮询聊天队列。
@@ -84,6 +84,12 @@ QQ 开放平台 / QQ 群
 
 在可访问 Bangumi 图片的机器上运行 `python deploy/fetch_waifu_portraits.py <目录>`，将图片放到机器人数据库所在目录的 `waifu-portraits` 子目录。机器人按需将图片上传到 QQ 官方素材库，并复用同内容素材；素材库权限或配额不可用时卡片会省略图片，其他内容仍保持一条消息。
 
+群级功能时间可在 `feature_policy.groups` 中按官方 group_openid 和功能组配置，例如 `{"GROUP_A":{"entertainment":{"schedule":"china_school_hours","closed_dates":["06-04"]},"llm":{"schedule":"always","closed_dates":["06-04"]}}}`。`entertainment` 默认包含 `/今日老婆`、`/换老婆` 及对应按钮；可通过 `feature_policy.categories` 增加其他功能组、命令名和按钮前缀。未配置的群或功能组不受限制。时间采用 Asia/Shanghai，区间为 00:00–07:00、14:00–17:00，结束时刻不包含在内；工作日分别使用每群每分钟 10 次和 3 次的滑动限流，超限静默。周末、国务院放假日期及指定寒暑假仅在上述时段开放，指定年度关闭日期全天生效。LLM 关闭日期直接返回维护提示，不请求模型。
+
+代码内置已核对的 2026、2027 年国务院放假日期；后续年份公布后应在 `feature_policy.holiday_ranges` 增加年份及 `[["MM-DD","MM-DD"], ...]` 放假区间。未知年份为避免漏掉节假日，工作日暂按受限日期处理并记录警告；补充官方日历并重启 Bot 后恢复准确规则。`closed_dates` 每年重复，格式为 `MM-DD`。
+
+自定义功能的群级规则可用 `schedule: "daily_windows"` 和 `windows: [["18:30","20:15"]]` 指定每日开放区间，可选 `limit_per_minute`；跨午夜窗口拆成两段。`china_school_hours` 也可通过 `windows`、`limit_in_windows`、`limit_outside_windows` 覆盖默认时段和限额。
+
 ## 构建与升级
 
 代理运行 plugin/build.ps1；子服使用 Maven 3.9+ 执行 `mvn -f spigot/pom.xml package`，数据库驱动随子服 JAR 打包。源码构建需要服务器根目录 core 下的 BungeeCord.jar、spigot-1.12.2.jar 和 proxy 下的 BungeeChat JAR；Maven 可用 `-Dmcserver.root=绝对路径` 指定服务器根目录。输出分别为 mcqq-bridge-2.0.0.jar、mcqq-spigot-2.0.0.jar。
@@ -94,7 +100,9 @@ QQ 开放平台 / QQ 群
 
 ## 独立 Python 发布包
 
-安装 `pip install mcqq_bridge-2.0.0-py3-none-any.whl`（将来发布到包索引后可按包名安装）。在任意用户工作目录运行 `mcqq init --config ./settings.json` 生成空凭据模板，填好配置后分别运行 `mcqq api --config ./settings.json` 和 `mcqq bot --config ./settings.json`。也支持 `python -m mcqq`。安装包只包含 mcqq 库、配置模板和元数据；不包含部署脚本、私有配置、数据库、日志或签名密钥。库可通过 `mcqq.service.create_app(config)` 嵌入 aiohttp 服务。
+安装 `pip install mcqq_bridge-2.0.0-py3-none-any.whl`（将来发布到包索引后可按包名安装）。在任意用户工作目录运行 `mcqq init --config ./settings.yml` 生成空凭据模板，填好配置后分别运行 `mcqq api --config ./settings.yml` 和 `mcqq bot --config ./settings.yml`。也支持 `python -m mcqq`。安装包只包含 mcqq 库、配置模板和元数据；不包含部署脚本、私有配置、数据库、日志或签名密钥。库可通过 `mcqq.service.create_app(config)` 嵌入 aiohttp 服务。
+
+可把 `scheduled_panel_groups` 设为需要独立面板的授权群 openid 数组，并定期运行 `python sync_group_panel.py`：脚本查询并按需更新 QQ 指定群面板，无需重启 Bot。需先确认 QQ 对指定群面板与已有全群面板的显示优先级，以及平台的实际审核和缓存行为；未验证前不要移除现有面板。被限制时的命令回复仍会显示下次开放时间。
 
 ## License
 

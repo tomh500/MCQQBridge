@@ -52,6 +52,10 @@
     "enabled": false,
     "credentials_file": ".private-daily-waifu.json"
   },
+  "feature_policy": {
+    "groups": {},
+    "holiday_ranges": {}
+  },
   "group_ai_config": "group-ai.yml",
   "group_ai_word_filter": "",
   "media": {
