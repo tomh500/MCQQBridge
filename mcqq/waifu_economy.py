@@ -125,12 +125,13 @@ class WaifuEconomy:
                     if not row or row[2] != token:
                         result = {'error': '按钮已失效。'}
                     else:
-                        # A separate acceptance operation is idempotent even for a new click.
+                        # Lock this draw even if an earlier draw was confirmed today.
+                        q.execute('UPDATE daily_waifu_draws SET swapped=1 WHERE subject=%s AND day=%s', (subject, day))
+                        # Preference training remains limited to once per subject/day.
                         key = 'accept:' + hashlib.sha256((subject + '|' + day).encode()).hexdigest()
                         q.execute('SELECT 1 FROM waifu_operations WHERE event_id=%s', (key,))
                         already = q.fetchone() is not None
                         if not already:
-                            q.execute('UPDATE daily_waifu_draws SET swapped=1 WHERE subject=%s AND day=%s', (subject, day))
                             entry = entries.get(row[0])
                             if balance >= 1 and entry:
                                 vector = learn(vector, entry)

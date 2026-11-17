@@ -122,3 +122,23 @@ class EconomyMySQLTests(unittest.TestCase):
             with c.cursor() as q:
                 q.execute('SELECT preference FROM waifu_accounts WHERE subject=%s', ('u',))
                 self.assertEqual(json.loads(q.fetchone()[0])['_confirmations'], 1)
+
+    def test_confirm_after_reset_locks_replacement_without_retraining(self):
+        day = '2026-11-17'
+        first = self.e.today('u', day)
+        self.e.points('u', 'set', 50, 'seed')
+        self.e.accept('u', day, first['draw_token'], 'accept1')
+        with self.s.pymysql.connect(**self.s.mysql) as c:
+            with c.cursor() as q:
+                q.execute('DELETE FROM daily_waifu_draws WHERE day=%s', (day,))
+        replacement = self.e.today('u', day)
+        self.assertNotEqual(first['draw_token'], replacement['draw_token'])
+        self.assertIn('error', self.e.accept('u', day, first['draw_token'], 'stale'))
+        self.assertTrue(self.e.accept('u', day, replacement['draw_token'], 'accept2')['accepted'])
+        self.assertFalse(self.e.swap('u', day, replacement['draw_token'])['exchanged'])
+        self.assertIn('error', self.e.wish('u', day, 'A', 'wish'))
+        self.assertEqual(self.e.points('u', 'query', 0, 'q')['points'], 49)
+        with self.s.pymysql.connect(**self.s.mysql) as c:
+            with c.cursor() as q:
+                q.execute('SELECT preference FROM waifu_accounts WHERE subject=%s', ('u',))
+                self.assertEqual(json.loads(q.fetchone()[0])['_confirmations'], 1)
