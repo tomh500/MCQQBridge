@@ -13,6 +13,37 @@ QQ 官方机器人与 Minecraft 群服互通框架。Java 包与构建 Group ID 
 
 公开模板没有任何服主凭据、固定群号或默认互通子服。机器人需要自行申请官方消息权限和主动推送额度。
 
+## 运行拓扑
+
+本仓库是源码、构建与发布框架，不绑定任何特定服务器、域名、群或 SSH 身份。生产环境可全部运行在一台 Linux 主机，也可将 Python 服务与 Minecraft 代理分开部署：
+
+```text
+QQ 开放平台 / QQ 群
+          │ WebSocket（官方 Bot SDK）
+          ▼
+    mcqq.bot（机器人进程）
+          │ HTTP + bot_token
+          ▼
+ mcqq.service（本地 API，默认 127.0.0.1:18765）
+          │ HTTP + proxy_token
+          ▼
+ BungeeCord + MCQQBridge
+          │ 插件消息 / 群聊队列
+          ├── Spigot/Paper 子服 A
+          └── Spigot/Paper 子服 B …
+```
+
+`settings.json` 只供 Python API 与机器人使用；BungeeCord 的 `plugins/MCQQBridge/config.yml` 需要使用相同的 `service-url` 和 `proxy-token`。每个子服安装 MCQQSpigot 后可用 `/said`（或 `group-commands` 中配置的别名）发送消息。不要把运行配置、SQLite 数据库、日志、备份、SSH 私钥或任何群 openid 提交到仓库。
+
+### 推荐启动顺序
+
+1. 从 `settings.example.json` 生成仅属于自己的 `settings.json`，填入 QQ 开放平台凭据与两枚不同的随机 token。
+2. 启动 `python -m mcqq.service`，并确认 `http://127.0.0.1:18765/healthz` 返回成功。
+3. 启动 `python -m mcqq.bot`，确认机器人在 QQ 平台上线。
+4. 配置并启动子服，再启动 BungeeCord；BungeeCord 加载 MCQQBridge 后开始轮询聊天队列。
+
+生产环境建议为 API 和 bot 分别创建服务管理器单元（如 systemd），让 bot 依赖 API；Minecraft 代理应在 API 健康检查成功后才启动。示例配置的群列表、互通子服列表与白名单功能默认关闭，需由服主按自己的实际环境显式开启。
+
 ## 功能开关
 
 代理 `config.yml` 的 `enabled` 是旧版兼容的群白名单开关，默认 false；推荐使用 `features.whitelist: true/false` 覆盖它。关闭白名单后，QQ聊天功能仍可独立开启。`chat-bridge.enabled` 控制代理聊天，`chat-bridge.servers` 列出允许互通的真实子服名称。开启白名单要求代理正版验证。配置错误时保持拒绝新登录的策略。控制台 `/mcqq reload`（兼容 `/qqwl reload`）重载代理配置。
@@ -29,6 +60,12 @@ QQ 官方机器人与 Minecraft 群服互通框架。Java 包与构建 Group ID 
 
 `/said 内容` 向出站列表中的群发送，并在允许的游戏子服广播。子服配置 `group-commands: {friends: "OPENID_A"}` 后，`/friends 内容` 只发送到目标群，同时在游戏内广播；重启生效。命令不能覆盖已有命令，权限为 mcqq.said。目标群需在授权及出站列表中。重复空格和标点保留，命令文本不会作为服务端命令执行。
 
+子服控制台也可使用 `/said 内容` 和 `group-commands` 中的自定义命令，以 Console 身份向游戏和 QQ 发言。需在子服 `remote` 配置本地 API 地址、与代理相同的 `proxy-token`、代理中的真实 `server-name`。机器人 `/跨群信息` 查询可用目标及 group_openid；`/跨群信息 [群名/别名] 内容` 定向发送，单词别名可省略方括号；`/跨群信息 ALL 内容` 广播到所有允许出站的群，包含来源群。机器人发送格式为 `【跨群信息｜来源群】发送者：内容`。
+
+`/发命令 lobby|survival|proxy|ALL /指令 参数` 以已绑定玩家身份执行；子服离线时使用受限模拟 Player，proxy 仅支持在线玩家。`/大发命令 lobby|survival|proxy|ALL /指令 参数` 以目标进程 Console 身份执行，不要求绑定游戏账号。目标由 `chat_bridge.command_targets` 显式开放，`ALL` 对列表中每个目标各执行一次。`bot_roles.owners` 填 QQ 官方 member_openid；只有主人和管理可用 `/大发命令`，管理只能指定单个子服，proxy 与 ALL 仅限主人。主人用 `/设bot管理 @成员` 和 `/取缔bot管理 @成员` 即时调整管理名单；名单存于机器人数据库，不需重启。API 服务端核验身份和权限并记录审计；子服需启用 `remote.poll-commands`。远程配置含密钥，勿提交仓库。
+
+`/状态情报` 显示机器人所在主机的操作系统版本、内核、开机运行天数/小时和物理内存已用量、总量及比例。该命令只读，并受 `chat_bridge.command_groups` 群白名单限制。
+
 ## 配置与数据存取
 
 子服 `SaidPlugin.storage()` 暴露统一异步 `get(key)` / `put(key,value)` 接口，null 表示删除，返回 CompletableFuture。键允许字母数字、下划线、冒号、斜线和连字符，最大190字符。数据库调用在独立线程执行；调用方应将 Bukkit 操作调回主线程。
@@ -36,6 +73,12 @@ QQ 官方机器人与 Minecraft 群服互通框架。Java 包与构建 Group ID 
 `storage.type` 可选 yaml（默认）、sql、mongodb。SQL URL 留空使用本地 SQLite；也可填写 jdbc:mysql://host/database 或 jdbc:postgresql://host/database，用户名和密码单独配置。MongoDB 填写 storage.mongodb.uri 和 database。SQL 使用 mcqq_settings 表，MongoDB 使用 settings 集合，YAML 使用插件目录 data.yml。切换后端不会自动搬迁已有数据。机器人绑定与队列仍由机器人 SQLite 管理，代理玩家聊天偏好保存在代理目录；Spigot 数据接口不替代这些数据源。
 
 默认配置从 JAR 生成至用户插件目录，不覆盖已存在配置；词库首次复制至代理数据目录，服主可修改，并通过重载生效。word-filter.enabled 控制过滤，red/yellow 提供额外正则。修改后应自行验证规则性能。
+
+修改 `mcqq/commands.py` 的 `COMMANDS` 后，发布时还必须在云端机器人运行目录执行 `.venv/bin/python sync_commands.py`，将命令同步到 QQ 官方 `/` 面板。脚本会回读并核对名称与描述；仅更新 Python 文件或重启 Bot 不会更新面板。
+
+群聊 AI 使用 `group_ai_config` 指向权限受限的 `group-ai.yml`（参考 `group-ai.example.yml`），并可通过 `group_ai_word_filter` 指向代理的 `config.yml` 与现有词库。仅 QQ 官方的「@机器人」事件且正文不以 `/` 开头时触发模型；全量群讯息里 @ 其他成员不会触发。`/历史讯息向量化` 仅 Bot 主人及管理可用，压缩时区分群与发言人的官方身份，并按群友昵称检索个人记忆。同名昵称不互认。每群只保留最近 300 条讯息；图片暂存总量上限 200 MiB，满额清空；摘要记忆每群最多 100 条。模型调用可沿用 Afterglow 的 OpenAI 相容端点，但群聊历史与私聊会话独立。输出超过五行时先发送预览；管理可按按钮或发送 `/展开 TOKEN` 查看全文，暂存 30 分钟。
+
+`/今日老婆` 使用 MySQL 保存每日结果与一次换取状态，MongoDB 保存可筛选角色目录。首次抽取附「换老婆」按钮；当天再查不附按钮，重复点击只取回同一位。按钮不可用时可输入 `/换老婆`。主人可用 `/今日老婆 重置` 清除当天所有人的抽取与换取次数；旧按钮随抽取代号失效。既有资料库需执行 `deploy/daily_waifu_swap_20261117.sql` 升级资料表。Redis 仅存短期回覆快取，过期自动清除；每日结果始终读 MySQL，确保重置或换取后不返回旧资料。资料库专用帐号应由部署者建立，凭据保存在不纳入 Git 的 `.private-daily-waifu.json`。原有绑定、队列和权限仍在 SQLite，避免迁移线上资料。
 
 ## 构建与升级
 

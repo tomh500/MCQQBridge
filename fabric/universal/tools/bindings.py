@@ -18,7 +18,7 @@ CLASSES = {
     'net.minecraft.util.FormattedCharSequence', 'net.minecraft.util.FormattedCharSink',
     'net.minecraft.network.chat.contents.PlainTextContents',
     'net.minecraft.resources.ResourceLocation',
-    'net.minecraft.resources.Identifier', 'com.mojang.blaze3d.platform.NativeImage',
+    'net.minecraft.resources.Identifier', 'com.mojang.blaze3d.platform.NativeImage', 'com.mojang.blaze3d.platform.InputConstants',
     'net.minecraft.client.renderer.texture.DynamicTexture',
     'net.minecraft.client.renderer.texture.TextureManager', 'net.minecraft.client.renderer.RenderType',
     'net.minecraft.client.renderer.RenderPipelines', 'net.minecraft.util.thread.BlockableEventLoop',

@@ -37,6 +37,7 @@ public final class ChatBridge implements Listener {
     private final java.util.concurrent.ThreadPoolExecutor queue = new java.util.concurrent.ThreadPoolExecutor(1, 1, 0,
         TimeUnit.SECONDS, new java.util.concurrent.ArrayBlockingQueue<Runnable>(128));
     private volatile boolean busy;
+    private volatile boolean commandBusy;
     private final ThreadLocal<String> qqGroup = new ThreadLocal<>();
     private final ThreadLocal<String> qqRole = new ThreadLocal<>();
     private final ThreadLocal<String> qqTitle = new ThreadLocal<>();
@@ -54,6 +55,7 @@ public final class ChatBridge implements Listener {
             }));
         }
         plugin.getProxy().getScheduler().schedule(plugin, this::poll, 1, 1, TimeUnit.SECONDS);
+        plugin.getProxy().getScheduler().schedule(plugin, this::pollRemoteCommands, 1, 1, TimeUnit.SECONDS);
     }
 
     private List<String> servers() { return plugin.chatConfig().getStringList("chat-bridge.servers"); }
@@ -61,9 +63,10 @@ public final class ChatBridge implements Listener {
         return plugin.chatConfig() != null && plugin.chatConfig().getBoolean("chat-bridge.enabled", false)
             && plugin.getProxy().getPluginManager().getPlugin("BungeeChat") != null;
     }
-    private JsonObject call(String path, JsonObject data) throws Exception {
+    private JsonObject call(String path, JsonObject data) throws Exception { return callApi("/v1/chat/" + path, data); }
+    private JsonObject callApi(String path, JsonObject data) throws Exception {
         Configuration config = plugin.chatConfig();
-        HttpURLConnection c = (HttpURLConnection) new URL(config.getString("service-url").replaceAll("/+$", "") + "/v1/chat/" + path).openConnection();
+        HttpURLConnection c = (HttpURLConnection) new URL(config.getString("service-url").replaceAll("/+$", "") + path).openConnection();
         c.setConnectTimeout(2000); c.setReadTimeout(3000); c.setInstanceFollowRedirects(false);
         c.setRequestMethod("POST"); c.setDoOutput(true);
         c.setRequestProperty("Authorization", "Bearer " + config.getString("proxy-token"));
@@ -189,7 +192,9 @@ public final class ChatBridge implements Listener {
                 if (!delivered.contains(id)) {
                     qqGroup.set(item.has("group_name") ? item.get("group_name").getAsString() : "群内");
                     Optional<String> message;
-                    try { message = render(item.get("uuid").getAsString(), item.get("name").getAsString(), literal(item.get("text").getAsString()), true,
+                    try { message = item.has("source") && item.get("source").getAsString().equals("console")
+                        ? Optional.of("§7[Console] §f" + literal(item.get("text").getAsString()))
+                        : render(item.get("uuid").getAsString(), item.get("name").getAsString(), literal(item.get("text").getAsString()), true,
                         item.has("role") ? item.get("role").getAsString() : "member",
                         item.has("qq_id") ? item.get("qq_id").getAsString() : "",
                         item.has("title") && !item.get("title").isJsonNull() ? item.get("title").getAsString() : null); } finally { qqGroup.remove(); }
@@ -204,6 +209,40 @@ public final class ChatBridge implements Listener {
             // The whitelist has separate workers; chat failures cannot block login verification.
             plugin.getLogger().fine("Chat poll unavailable: " + e.getClass().getSimpleName());
         } finally { busy = false; }
+    }
+
+    private void pollRemoteCommands() {
+        if (plugin.chatConfig() == null || commandBusy) return;
+        commandBusy = true;
+        try {
+            JsonObject request = new JsonObject(); request.addProperty("server", "proxy");
+            JsonArray commands = callApi("/v1/command/poll", request).getAsJsonArray("commands");
+            for (JsonElement element : commands) {
+                JsonObject item = element.getAsJsonObject();
+                String result;
+                try {
+                    net.md_5.bungee.api.CommandSender sender;
+                    boolean console = item.get("mode").getAsString().equals("console");
+                    if (console) sender = plugin.getProxy().getConsole();
+                    else {
+                        ProxiedPlayer player = plugin.getProxy().getPlayer(UUID.fromString(item.get("game_uuid").getAsString()));
+                        if (player == null) throw new IllegalStateException("proxy 玩家不在线；请指定子服使用离线模拟身份");
+                        sender = player;
+                    }
+                    boolean accepted = plugin.getProxy().getPluginManager().dispatchCommand(sender,
+                        item.get("command").getAsString().substring(1));
+                    result = (accepted ? "已执行" : "指令未被接受") + (console ? "（proxy Console 身份）" : "（proxy 在线玩家身份）");
+                } catch (Throwable e) {
+                    result = "指令执行失败：" + e.getClass().getSimpleName() + (e.getMessage() == null ? "" : " " + e.getMessage());
+                }
+                JsonObject completed = new JsonObject(); completed.addProperty("server", "proxy");
+                completed.addProperty("event", item.get("event").getAsString());
+                completed.addProperty("result", result.length() > 1900 ? result.substring(0, 1900) : result);
+                callApi("/v1/command/complete", completed);
+            }
+        } catch (Exception e) {
+            plugin.getLogger().fine("Remote command poll unavailable: " + e.getClass().getSimpleName());
+        } finally { commandBusy = false; }
     }
 
     @EventHandler public void said(PluginMessageEvent event) {

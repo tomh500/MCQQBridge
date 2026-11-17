@@ -53,6 +53,18 @@ public final class ChatImageCore {
     private boolean labelsDirty;
     private final java.util.Set<String> drawn=new java.util.HashSet<>();
     private boolean labelHidingDisabled;
+    // The 26.2 compiler would inline the old GLFW value; resolve the running
+    // client's constant instead because 26.3 switched to SDL button numbers.
+    private static final int LEFT_BUTTON = leftMouseButton();
+    private static final int ESCAPE_KEY = inputConstant("KEY_ESCAPE");
+    private static int leftMouseButton() {
+        return inputConstant("MOUSE_BUTTON_LEFT");
+    }
+    private static int inputConstant(String name) {
+        try { return com.mojang.blaze3d.platform.InputConstants.class.getField(name).getInt(null); }
+        catch(ReflectiveOperationException error) { throw new IllegalStateException("Cannot resolve mouse button mapping",error); }
+    }
+    public boolean isEscape(int key) { return key==ESCAPE_KEY; }
     private java.lang.reflect.Field chatLines, chatScroll;
     private final Minecraft client = Minecraft.getInstance();
     private final Map<String, Preview> previews = new LinkedHashMap<>();
@@ -114,7 +126,7 @@ public final class ChatImageCore {
         for(int i=0;i<siblings.size();i++) {
             Component child=siblings.get(i);
             if(child.getContents() instanceof net.minecraft.network.chat.contents.PlainTextContents literal
-                && (literal.text().equals("[图片]") || literal.text().equals("[表情包]")) && child.getSiblings().isEmpty()) {
+                && (literal.text().trim().equals("[图片]") || literal.text().trim().equals("[表情包]")) && child.getSiblings().isEmpty()) {
                 var found=new ArrayList<URI>(); findLinks(child,found);
                 if(!found.isEmpty()) {
                     var wrapper=Component.empty().append(child); siblings.set(i,wrapper);
@@ -276,9 +288,9 @@ public final class ChatImageCore {
         }
     }
     public boolean click(double x,double y,int button) {
-        if(button!=0)return false;
+        if(button!=LEFT_BUTTON)return false;
         if(enlarged!=null) {
-            if(viewer!=null && !viewer.press(x,y,button,viewerWidth,viewerHeight)) { enlarged=null; viewer=null; }
+            if(viewer!=null && !viewer.press(x,y,viewerWidth,viewerHeight)) { enlarged=null; viewer=null; }
             return true;
         }
         for(Hit hit:hits) if(x>=hit.x && x<hit.x+hit.width && y>=hit.y && y<hit.y+hit.height) {

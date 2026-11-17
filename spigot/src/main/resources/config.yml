@@ -16,6 +16,14 @@ features:
 # /said 发送到全部授权群；自定义命令只发指定群，两者均在游戏中广播。/ /said sends to all groups, aliases to one group.
 group-commands: {}
 
+# 控制台 /said 与离线 QQ 指令使用本地 API；云端需填写与代理相同的 proxy-token。
+# server-name 必须与代理子服键名一致。仅指定指令执行子服启用 poll-commands。
+remote:
+  service-url: http://127.0.0.1:18765
+  proxy-token: ''
+  server-name: ''
+  poll-commands: false
+
 # 此处仅存储 Spigot Storage API 数据，不会迁移机器人绑定/队列或代理聊天偏好。
 # This stores Spigot Storage API data only; bot bindings/queues and proxy preferences are separate.
 # 改变后端不会自动迁移旧数据。先备份，再迁移。/ Changing backend does not migrate existing data.

@@ -31,8 +31,7 @@ public final class ImageViewer {
             origin.width+(end.width-origin.width)*p,origin.height+(end.height-origin.height)*p);
     }
     public double progress(long now) { return Math.max(0,Math.min(1,(now-started)/240.0)); }
-    public boolean press(double x,double y,int button,int width,int height) {
-        if(button!=0)return false;
+    public boolean press(double x,double y,int width,int height) {
         if(!viewport(width,height).contains(x,y))return false;
         dragging=true; lastX=x; lastY=y; return true;
     }

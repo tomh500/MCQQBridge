@@ -2,12 +2,16 @@
 __pycache__/
 *.pyc
 settings.json
+settings.json.bak-*
 bridge.json
 .env
 *.db*
 *.log
 .private/
 deployment-backups/
+.deploy-staging/
+migration-backups/
+botpy.log*
 dist/
 **/target/
 **/build/
@@ -24,3 +28,14 @@ test-sandbox/
 
 !multiloader/**/gradle/wrapper/gradle-wrapper.jar
 **/run/
+
+# Per-server operator helpers: keep hosts, SSH identities and deployment details outside the public project.
+*.local.ps1
+*.local.sh
+*.local.cmd
+
+# Private runtime credentials and model configuration
+.private-*.json
+group-ai.yml
+group-ai-images/
+backups/

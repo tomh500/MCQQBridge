@@ -58,8 +58,8 @@ async def main():
         async with session.get(API + "/v2/panels/" + panel_id) as response:
             verified = await read(response)
         actual = verified.get("panel", {}).get("items", [])
-        if [i.get("name") for i in actual] != [i["name"] for i in panel["items"]]:
-            raise RuntimeError("QQ panel readback did not match submitted commands")
+        if [(i.get("name"), i.get("desc")) for i in actual] != [(i["name"], i["desc"]) for i in panel["items"]]:
+            raise RuntimeError("QQ panel readback did not match submitted commands and descriptions")
         print("QQ group command panel registered and readback verified: " + ", ".join(i["name"] for i in actual))
 
 

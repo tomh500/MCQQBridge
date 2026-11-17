@@ -8,10 +8,10 @@ public final class ViewerProbe {
         if(viewport.width()!=936 || viewport.height()!=468)throw new AssertionError("Viewport must fit original aspect ratio");
         if(!viewer.animated(1000,700,1000).equals(start))throw new AssertionError("Animation must begin at thumbnail");
         if(!viewer.animated(1000,700,1240).equals(viewer.image(1000,700)))throw new AssertionError("Animation must end at centered image");
-        viewer.press(500,350,0,1000,700); viewer.drag(900,650,1000,700); viewer.release();
+        viewer.press(500,350,1000,700); viewer.drag(900,650,1000,700); viewer.release();
         if(!viewer.image(1000,700).equals(viewport))throw new AssertionError("Unzoomed image must not pan");
         viewer.scroll(500,350,4,1000,700);
-        viewer.press(500,350,0,1000,700); viewer.drag(5000,5000,1000,700); viewer.release();
+        viewer.press(500,350,1000,700); viewer.drag(5000,5000,1000,700); viewer.release();
         var moved=viewer.image(1000,700);
         if(moved.x()>viewport.x()+0.001 || moved.y()>viewport.y()+0.001)throw new AssertionError("Pan exposed empty space at edge");
         viewer.scroll(500,350,-100,1000,700);

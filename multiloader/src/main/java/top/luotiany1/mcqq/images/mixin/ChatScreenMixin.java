@@ -30,7 +30,7 @@ public abstract class ChatScreenMixin extends Screen {
     }
     @Inject(method="keyPressed", at=@At("HEAD"), cancellable=true, remap=false)
     private void mcqq$key(KeyEvent event,CallbackInfoReturnable<Boolean> result) {
-        if(event.key()==256 && ChatImageCore.INSTANCE.dismissViewer())result.setReturnValue(true);
+        if(ChatImageCore.INSTANCE.isEscape(event.key()) && ChatImageCore.INSTANCE.dismissViewer())result.setReturnValue(true);
     }
     @Override public boolean mouseReleased(MouseButtonEvent event) {
         if(ChatImageCore.INSTANCE.releaseViewer())return true;

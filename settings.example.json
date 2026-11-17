@@ -15,6 +15,9 @@
     "chat_bridge.servers": "允许互通的代理子服名称数组，必须与代理chat-bridge.servers匹配；空数组关闭转发。/ Backend names participating in chat; match proxy settings; [] disables relay.",
     "chat_bridge.inbound_groups": "允许QQ群消息进入游戏的group_openid数组，必须为allowed_groups子集。[]不接收，省略兼容接收全部授权群。/ Groups allowed to send to game, subset of allowed_groups; []=none; omitted=all authorized.",
     "chat_bridge.group_aliases": "group_openid到显示群名的映射，例：{\"GROUP_OPENID_A\":\"朋友群\"}。别名优先，其次自动获取群名，最后回退ID。/ Display aliases keyed by group_openid; alias > fetched group name > ID.",
+    "chat_bridge.command_targets": "可执行远程指令的子服名称或proxy，[]关闭此功能；ALL广播到列表中每个目标。/ Remote command targets; [] disables commands.",
+    "bot_roles.owners": "Bot主人官方member_openid列表；只有主人可设/取缔管理及对proxy或ALL发Console指令。/ Official owner member_openids.",
+    "bot_roles.admins": "可选初始管理列表；运行时可由主人用命令调整，数据库中的变更优先。/ Optional initial admins; runtime changes in the database take precedence.",
     "media.port": "可选图片回退服务监听端口；0关闭独立媒体监听器。/ Optional image fallback listener port; 0 disables the extra listener.",
     "media.public_base_url": "游戏玩家可访问的图片URL前缀，例：https://images.example.com/mcqq-media；不应填内部API地址。/ Public image base URL reachable by players; not the internal API URL.",
     "features.private_ai": "是否启用私聊AI适配器，默认false；需要额外配置afterglow_connection。/ Enable optional private AI adapter; false by default.",
@@ -36,8 +39,21 @@
   "chat_bridge": {
     "servers": [],
     "inbound_groups": [],
-    "group_aliases": {}
+    "group_aliases": {},
+    "command_targets": [],
+    "outbound_groups": [],
+    "command_groups": []
   },
+  "bot_roles": {
+    "owners": [],
+    "admins": []
+  },
+  "daily_waifu": {
+    "enabled": false,
+    "credentials_file": ".private-daily-waifu.json"
+  },
+  "group_ai_config": "group-ai.yml",
+  "group_ai_word_filter": "",
   "media": {
     "port": 0,
     "public_base_url": ""

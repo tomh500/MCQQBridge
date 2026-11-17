@@ -266,13 +266,28 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
     def test_qq_panel_fields_fit_official_display_width_limits(self):
         from sync_commands import panel_config, display_width
         panel = panel_config()
-        self.assertEqual(len(panel["items"]), 13)
+        self.assertEqual(len(panel["items"]), 20)
+        self.assertIn("跨群信息", [item["name"] for item in panel["items"]])
+        self.assertIn("发命令", [item["name"] for item in panel["items"]])
+        self.assertIn("大发命令", [item["name"] for item in panel["items"]])
+        self.assertIn("设bot管理", [item["name"] for item in panel["items"]])
+        self.assertIn("取缔bot管理", [item["name"] for item in panel["items"]])
+        self.assertIn("状态情报", [item["name"] for item in panel["items"]])
+        self.assertIn("今日老婆", [item["name"] for item in panel["items"]])
         self.assertEqual(display_width("本群ID"), 6)
         for item in panel["items"]:
             self.assertLessEqual(display_width(item["name"]), 14)
             self.assertLessEqual(display_width(item["desc"]), 30)
 
     def test_explicit_commands_and_action_specific_hints(self):
+        self.assertEqual(parse("/发命令 survival /say  hi !"), ("game_command", "survival", "/say  hi !"))
+        self.assertEqual(parse("/大发命令 总代 /end"), ("console_command", "proxy", "/end"))
+        self.assertEqual(parse("/大发命令 ALL say hi @a"), ("console_command", "ALL", "/say hi @a"))
+        self.assertEqual(parse("/设bot管理 <@!" + "A"*32 + ">"), ("admin_add", None, "<@!" + "A"*32 + ">"))
+        self.assertEqual(parse("/取缔bot管理 @" + "A"*32), ("admin_remove", None, "@" + "A"*32))
+        self.assertEqual(parse("/状态情报"), ("system_info", None, None))
+        self.assertEqual(parse("/今日老婆"), ("daily_waifu", None, None))
+        with self.assertRaises(ValueError): parse("/发命令 /say hi")
         self.assertEqual(parse("/绑定Java Steve"), ("bind", "java", "Steve"))
         self.assertEqual(parse("/换绑基岩 Xbox Name"), ("rebind", "bedrock", "Xbox Name"))
         self.assertEqual(parse("/解绑 确认"), ("unbind", None, "确认"))

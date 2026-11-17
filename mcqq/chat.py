@@ -93,19 +93,26 @@ def register(app, cfg, store, identity, resolve_media):
             else:
                 if data["server"] not in servers():
                     raise web.HTTPForbidden()
-                player_uuid = str(uuid.UUID(data["uuid"]))
-                name = data["name"]
-                if not isinstance(name, str) or not 1 <= len(name) <= 32:
-                    raise ValueError("name")
-                binding = db.execute("SELECT subject FROM bindings WHERE game_uuid=?", (player_uuid,)).fetchone()
+                console = data.get("source") == "console"
+                if console:
+                    name, binding = "Console", None
+                else:
+                    player_uuid = str(uuid.UUID(data["uuid"]))
+                    name = data["name"]
+                    if not isinstance(name, str) or not 1 <= len(name) <= 32:
+                        raise ValueError("name")
+                    binding = db.execute("SELECT subject FROM bindings WHERE game_uuid=?", (player_uuid,)).fetchone()
                 target = data.get("group", "")
                 if not isinstance(target, str) or (target and target not in outbound_groups()):
                     raise web.HTTPForbidden()
+                if console:
+                    enqueue(db, "game", "console:" + event,
+                            {"text": text, "source": "console", "uuid": "", "name": "Console", "group_name": "控制台", "role": "member"})
                 for group in ([target] if target else outbound_groups()):
                     nick = db.execute("SELECT nickname FROM chat_names WHERE subject=? AND group_id=?",
                                       (binding["subject"], group)).fetchone() if binding else None
                     enqueue(db, "qq", group + ":" + event,
-                            {"group": group, "text": "[游戏内]" + (nick[0] if nick else name) + ":" + text})
+                            {"group": group, "text": ("[Console]" if console else "[游戏内]") + (nick[0] if nick else name) + ":" + text})
         return web.json_response({"ok": True})
 
     async def poll(request):

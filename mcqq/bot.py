@@ -3,6 +3,10 @@ import logging
 import json
 import time
 import re
+import hashlib
+import hmac
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from collections import OrderedDict
 from pathlib import Path
 
@@ -15,12 +19,46 @@ from .config import load
 from . import launcher
 from botpy.message import GroupMessage
 from . import media
+from . import status_bot
+from . import system_info
+from . import reply_controls
+from .group_ai import GroupAI
 
 
 class RichGroupMessage(GroupMessage):
     __slots__ = ("raw_data",)
 
 log = logging.getLogger(__name__)
+
+
+def plain_game_output(value):
+    """Remove Minecraft legacy color codes before displaying command output in QQ."""
+    return re.sub(r"§[0-9a-fk-orx]", "", value, flags=re.IGNORECASE)
+
+
+def mentioned_member(message, argument):
+    """Use the QQ mention's official member ID, never a display name."""
+    match = re.fullmatch(r"(?:<@!?|@)([A-Fa-f0-9]{32})>?", argument.strip())
+    if match:
+        return match.group(1).upper()
+    raw = getattr(message, "raw_data", None) or {}
+    if not isinstance(raw, dict):
+        return None
+    known_mentions = raw.get("mentions") or []
+    mentions = list(known_mentions) + list(raw.get("msg_elements") or [])
+    found = set()
+    for element in mentions:
+        if not isinstance(element, dict):
+            continue
+        if element.get("type") not in ("at", "mention", "AT") and element not in known_mentions:
+            continue
+        for value in (element, element.get("data"), element.get("at"), element.get("mention")):
+            if isinstance(value, dict):
+                for key in ("member_openid", "target_member_openid", "openid", "target"):
+                    candidate = value.get(key)
+                    if isinstance(candidate, str) and re.fullmatch(r"[A-Fa-f0-9]{32}", candidate):
+                        found.add(candidate.upper())
+    return next(iter(found)) if len(found) == 1 and argument.strip().startswith("@") else None
 
 
 def binding_summary(binding):
@@ -46,6 +84,9 @@ class QQBot(botpy.Client):
         self.group_names = {}
         self.seen = OrderedDict()
         self.chat_task = None
+        self.expanded_store = reply_controls.ExpandedStore(settings["database"],
+            settings.get("daily_waifu", {}).get("redis_url"))
+        self.group_ai = GroupAI(settings) if settings.get("group_ai_config") else None
 
     async def bot_connect(self, session):
         # botpy 1.2.1 predates GROUP_MESSAGE_CREATE and drops author nickname/bot fields.
@@ -81,7 +122,141 @@ class QQBot(botpy.Client):
         if self.chat_task:
             self.chat_task.cancel()
             await asyncio.gather(self.chat_task, return_exceptions=True)
+        await self.expanded_store.close()
         await super().close()
+
+    def reply_store(self):
+        store = getattr(self, "expanded_store", None)
+        if store is None:
+            self.expanded_store = store = reply_controls.ExpandedStore(self.settings["database"])
+        return store
+
+    async def send_group_text(self, group, content, *, msg_id=None, translate=True):
+        content = plain_game_output(content)
+        if translate:
+            content = reply_controls.localize(content)
+        short, folded = reply_controls.preview(content)
+        if not folded:
+            return await self.api.post_group_message(group_openid=group, msg_type=0,
+                                                     content=short, **({"msg_id": msg_id} if msg_id else {}))
+        token = await self.reply_store().save(group, content)
+        keyboard = {"content": {"rows": [{"buttons": [{"id": "expand", "render_data": {
+            "label": "展开完整内容", "visited_label": "再次展开", "style": 1},
+            "action": {"type": 1, "permission": {"type": 2}, "data": "expand:" + token}}]}]}}
+        try:
+            return await self.api.post_group_message(group_openid=group, msg_type=2,
+                markdown={"content": short}, keyboard=keyboard,
+                **({"msg_id": msg_id} if msg_id else {}))
+        except Exception as exc:
+            log.warning("QQ markdown button unavailable (%s); using text fallback", type(exc).__name__)
+            return await self.api.post_group_message(group_openid=group, msg_type=0,
+                content=short + "\n主人或管理可发送 /展开 " + token,
+                **({"msg_id": msg_id} if msg_id else {}))
+
+    async def reply_group_text(self, message, content, *, translate=True):
+        content = plain_game_output(content)
+        if translate:
+            content = reply_controls.localize(content)
+        _, folded = reply_controls.preview(content)
+        if not folded:
+            return await message.reply(content=content)
+        return await self.send_group_text(message.group_openid, content, msg_id=message.id, translate=False)
+
+    async def role_for(self, group, member):
+        result = await self.call_service("/v1/command/role", {
+            "app_id": self.settings["app_id"], "group_openid": group, "member_openid": member})
+        return result.get("role", "member")
+
+    async def post_full(self, group, content, *, msg_id=None, event_id=None):
+        for sequence, chunk in enumerate(reply_controls.chunks(content), 1):
+            kwargs = {"msg_id": msg_id, "msg_seq": sequence} if msg_id else {"event_id": event_id, "msg_seq": sequence}
+            await self.api.post_group_message(group_openid=group, msg_type=0,
+                                              content=chunk, **kwargs)
+
+    async def send_expanded(self, group, token, member, *, msg_id=None):
+        try:
+            role = await self.role_for(group, member)
+            if role not in ("owner", "admin"):
+                return False
+            content = await self.reply_store().load(group, token)
+            if not content:
+                return None
+            await self.post_full(group, content, msg_id=msg_id)
+            return True
+        except Exception:
+            log.exception("Expanded QQ reply failed")
+            return None
+
+    def waifu_button_data(self, group, member, day, draw_token):
+        payload = f"{group}|{member}|{day}|{draw_token}".encode()
+        signature = hmac.new(self.settings["bot_token"].encode(), payload, hashlib.sha256).hexdigest()[:24]
+        return f"waifu_swap:{day}:{draw_token}:{signature}"
+
+    async def send_waifu_card(self, group, data, *, msg_id=None, event_id=None, show_swap=False):
+        if "error" in data:
+            await self.api.post_group_message(group_openid=group, msg_type=0, content=data["error"],
+                **({"msg_id": msg_id} if msg_id else {"event_id": event_id}))
+            return
+        if data.get("exchanged"):
+            caption = "【今日老婆｜已换一次】\n" + data["name"]
+        elif data.get("swapped"):
+            caption = "【今天还是这位老婆｜已换过】\n" + data["name"]
+        else:
+            caption = ("【今日老婆】" if data.get("new") else "【今天还是这位老婆】") + "\n" + data["name"]
+        reference = {"msg_id": msg_id} if msg_id else {"event_id": event_id}
+        try:
+            portrait = await self.api.post_group_file(group_openid=group, file_type=1, url=data["image_url"])
+            await self.api.post_group_message(group_openid=group, msg_type=7,
+                content=caption, media=portrait, msg_seq=1, **reference)
+        except Exception as exc:
+            log.warning("QQ portrait delivery unavailable (%s); using source link", type(exc).__name__)
+            await self.api.post_group_message(group_openid=group, msg_type=0,
+                content=caption + "\n图片：" + data["image_url"], msg_seq=1, **reference)
+        if show_swap and data.get("new") and not data.get("swapped") and msg_id:
+            action = self.waifu_button_data(group, data["member_openid"], data["day"], data["draw_token"])
+            keyboard = {"content": {"rows": [{"buttons": [{"id": "waifu_swap", "render_data": {
+                "label": "🔄 换老婆", "visited_label": "🔄 换老婆", "style": 1},
+                "action": {"type": 1, "permission": {"type": 2}, "data": action}}]}]}}
+            try:
+                await self.api.post_group_message(group_openid=group, msg_type=2,
+                    content="今天还可换一次。", markdown={"content": "今天还可换一次。"},
+                    keyboard=keyboard, msg_id=msg_id, msg_seq=2)
+            except Exception as exc:
+                log.warning("QQ waifu button unavailable (%s); using text fallback", type(exc).__name__)
+                await self.api.post_group_message(group_openid=group, msg_type=0,
+                    content="今天还可换一次：发送 /换老婆。", msg_id=msg_id, msg_seq=2)
+
+    async def daily_waifu_reply(self, message, action="today"):
+        group = str(getattr(message, "group_openid", "") or "")
+        allowed = self.settings.get("allowed_groups", [])
+        commands = self.settings.get("chat_bridge", {}).get("command_groups", allowed)
+        member = str(getattr(getattr(message, "author", None), "member_openid", "") or "")
+        if group not in allowed or group not in commands or not member or not getattr(message, "id", None):
+            await self.send_group_text(group, "本群尚未开放此指令，或缺少 QQ 官方身份。", msg_id=message.id)
+            return
+        try:
+            data = await self.call_service("/v1/waifu/" + action, {
+                "app_id": self.settings["app_id"], "group_openid": group, "member_openid": member})
+            data["member_openid"] = member
+            await self.send_waifu_card(group, data, msg_id=message.id, show_swap=action == "today")
+        except (aiohttp.ClientError, asyncio.TimeoutError, ValueError, KeyError):
+            await self.send_group_text(group, "今日老婆暂时无法取得，请稍后再试。", msg_id=message.id)
+
+    async def daily_waifu_reset(self, message):
+        group = str(getattr(message, "group_openid", "") or "")
+        member = str(getattr(getattr(message, "author", None), "member_openid", "") or "")
+        try:
+            data = await self.call_service("/v1/waifu/reset", {
+                "app_id": self.settings["app_id"], "group_openid": group,
+                "member_openid": member, "event_id": message.id})
+            if "error" in data:
+                await self.reply_group_text(message, data["error"])
+            else:
+                await self.reply_group_text(message,
+                    f"已重置今天全部群友的今日老婆与换取次数，共清除 {data['count']} 笔纪录。"
+                    if data.get("reset") else "这次重置请求已处理。")
+        except (aiohttp.ClientError, asyncio.TimeoutError, ValueError, KeyError):
+            await self.reply_group_text(message, "重置暂时无法使用，请稍后再试。")
 
     async def chat_delivery(self):
         delivered = set()
@@ -91,7 +266,7 @@ class QQBot(botpy.Client):
                 for item in result.get("messages", []):
                     if item["id"] not in delivered:
                         # No msg_id: this is an active group message, requiring QQ permission/quota.
-                        await self.api.post_group_message(group_openid=item["group"], msg_type=0, content=item["text"])
+                        await self.send_group_text(item["group"], item["text"], translate=False)
                         delivered.add(item["id"])
                     await self.call_service("/v1/chat/ack-qq", {"ids": [item["id"]]})
                 if len(delivered) > 4096:
@@ -143,14 +318,23 @@ class QQBot(botpy.Client):
             log.warning("Group chat relay unavailable")
 
     async def call_service(self, path, payload):
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20)) as session:
+        status_query = path == status_bot.QUERY_PATH
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=3 if status_query else 20)) as session:
             async with session.post(self.settings["service_url"].rstrip("/") + path,
                                     headers={"Authorization": "Bearer " + self.settings["bot_token"]}, json=payload) as response:
-                if response.status not in (200, 400, 409, 503):
+                if response.status not in ((200, 400, 409, 429, 503) if status_query else (200, 400, 403, 409, 503)):
                     raise aiohttp.ClientError("binding service unavailable")
                 return await response.json()
 
     async def group_response(self, message):
+        group = str(getattr(message, "group_openid", "") or "")
+        # Bootstrap command: a new group needs its own ID before it can join
+        # command_groups or allowed_groups. Never trust a user-supplied ID.
+        if group and re.fullmatch(r"/本群ID", re.sub(r"^<@!?[^>]+>\s*", "", message.content or "").strip()):
+            return "本群 group_openid：" + group
+        command_groups = self.settings.get("chat_bridge", {}).get("command_groups")
+        if command_groups is not None and (not isinstance(command_groups, list) or group not in command_groups):
+            return "本群暂未开放机器人命令。"
         try:
             launcher_response = await launcher.reply(self, message)
         except (aiohttp.ClientError, asyncio.TimeoutError, ValueError, KeyError):
@@ -170,12 +354,104 @@ class QQBot(botpy.Client):
             return HELP
         if group not in self.settings.get("allowed_groups", []):
             return "本群尚未开放绑定，请让服主配置 /本群ID 返回的标识。"
+        if action == "system_info":
+            try:
+                return await asyncio.to_thread(system_info.read_system_info)
+            except (OSError, ValueError, KeyError):
+                return "机器状态暂时无法读取。"
+        if action in ("admin_add", "admin_remove"):
+            if not member or not getattr(message, "id", None):
+                return "缺少 QQ 官方身份凭证。"
+            target = mentioned_member(message, name)
+            if not target:
+                return "请在命令后真正 @ 一名群成员，例如 /设bot管理 @成员。"
+            payload = {"app_id": self.settings["app_id"], "group_openid": group,
+                       "member_openid": member, "event_id": message.id,
+                       "target_member_openid": target,
+                       "action": "add" if action == "admin_add" else "remove"}
+            try:
+                data = await self.call_service("/v1/command/admin", payload)
+                if "error" in data:
+                    return data["error"]
+                return "已" + ("设置" if action == "admin_add" else "取缔") + " Bot 管理：" + target
+            except (aiohttp.ClientError, asyncio.TimeoutError, ValueError, KeyError):
+                return "Bot 管理设置暂时不可用。"
+        if action == "cross_group_list":
+            outbound = self.settings.get("chat_bridge", {}).get("outbound_groups", self.settings.get("allowed_groups", []))
+            if not outbound:
+                return "目前没有开放跨群目标。"
+            aliases = self.settings.get("chat_bridge", {}).get("group_aliases", {})
+            lines = ["【可用跨群目标】"]
+            for target in outbound:
+                label = aliases.get(target) or await self.group_name(target) or target
+                lines.append(f"{label}：{target}" + ("（本群）" if target == group else ""))
+            lines.append("发送：/跨群信息 [群名/别名] 内容；单词别名也可不加[]。")
+            lines.append("/跨群信息 ALL 内容 会发送到上列全部群，包含本群。")
+            return "\n".join(lines)
+        if action == "cross_group":
+            author = getattr(message, "author", None)
+            if not getattr(author, "member_openid", None) or not getattr(message, "id", None):
+                return "缺少 QQ 官方身份凭证，请重新发送命令。"
+            outbound = self.settings.get("chat_bridge", {}).get("outbound_groups", self.settings.get("allowed_groups", []))
+            if platform.upper() == "ALL":
+                destinations = list(outbound)
+            else:
+                destination = await self.resolve_group(platform)
+                if destination is None:
+                    return "目标群未找到或名称有歧义；发送 /跨群信息 查询可用群。"
+                if destination == group:
+                    return "目标群就是本群；如需广播全部群，请使用 ALL。"
+                destinations = [destination]
+            if not destinations:
+                return "目前没有开放跨群目标。"
+            if len(name) > 2000 or any(ord(char) < 32 and char != "\t" for char in name):
+                return "消息过长或含有控制字符（最多 2000 字符）。"
+            aliases = self.settings.get("chat_bridge", {}).get("group_aliases", {})
+            source = aliases.get(group) or await self.group_name(group) or group
+            sender = (getattr(author, "nickname", None) or getattr(author, "username", None)
+                      or getattr(author, "member_openid", "群友"))
+            sender = re.sub(r"[\r\n\x00-\x1f]", "", str(sender))[:64]
+            content = f"【跨群信息｜{source}】{sender}：{name}"
+            if len(content) > 2000:
+                return "消息含来源标记后超过 2000 字符，请缩短内容。"
+            delivered = []
+            for destination in destinations:
+                try:
+                    await self.send_group_text(destination, content, translate=False)
+                    delivered.append(destination)
+                except Exception:
+                    log.exception("Cross-group delivery failed for %s", destination)
+            if len(delivered) != len(destinations):
+                return f"已发送到 {len(delivered)}/{len(destinations)} 个群；部分群发送失败。"
+            return f"已发送到 {len(delivered)} 个群。"
+        if action in ("game_command", "console_command"):
+            author = getattr(message, "author", None)
+            member = str(getattr(author, "member_openid", "") or "")
+            if not member or not getattr(message, "id", None):
+                return "缺少 QQ 官方身份凭证，请重新发送命令。"
+            payload = {"app_id": self.settings["app_id"], "group_openid": group,
+                       "member_openid": member, "event_id": message.id, "command": name,
+                       "target": platform, "mode": "console" if action == "console_command" else "player"}
+            try:
+                result = await self.call_service("/v1/command/submit", payload)
+                if "error" in result:
+                    return result["error"]
+                for _ in range(15):
+                    if result.get("state") == "done":
+                        return "\n".join(f"{item['server']}：{plain_game_output(item['result']) or '已执行。'}" for item in result["results"])
+                    await asyncio.sleep(1)
+                    result = await self.call_service("/v1/command/result", payload)
+                return "指令已提交；执行结果暂未返回。"
+            except (aiohttp.ClientError, asyncio.TimeoutError, ValueError, KeyError):
+                return "游戏指令服务暂时不可用。"
         if action == "chat":
             data = await self.call_service("/v1/chat/status", {})
             return ("【群服互通】\n子服：" + "、".join(data.get("servers", [])) +
                     "\n群内文本 → 游戏：[群内]角色或QQ官方身份:文本\n游戏 → 群：/said 文本（普通聊天不转发）\n需要群主开启接收全量消息及主动消息权限。\n你的群身份ID：" + member)
         if not member or not getattr(message, "id", None):
             return "缺少 QQ 官方身份凭证，请重新 @机器人 发送命令。"
+        if action == "server_status":
+            return await status_bot.reply(self, message)
         payload = {"app_id": self.settings["app_id"], "group_openid": group, "member_openid": member}
         try:
             if action in ("title_set", "title_clear"):
@@ -249,20 +525,129 @@ class QQBot(botpy.Client):
             log.warning("Binding service request failed")
             return "绑定服务暂时不可用，请稍后重试；可用 /我的绑定 确认上次操作是否已完成。"
 
-    async def on_group_at_message_create(self, message):
-        await self.on_group_message_create(message)
+    async def resolve_group(self, requested):
+        allowed = self.settings.get("allowed_groups", [])
+        outbound = self.settings.get("chat_bridge", {}).get("outbound_groups", allowed)
+        aliases = self.settings.get("chat_bridge", {}).get("group_aliases", {})
+        matches = []
+        for group in outbound:
+            if requested == group or requested == aliases.get(group) or requested == await self.group_name(group):
+                matches.append(group)
+        return matches[0] if len(matches) == 1 else None
 
-    async def on_group_message_create(self, message):
-        if self.duplicate("group", message.id):
+    async def on_group_at_message_create(self, message):
+        await self.on_group_message_create(message, explicit_at=True)
+
+    async def on_interaction_create(self, interaction):
+        group = str(getattr(interaction, "group_openid", "") or "")
+        member = str(getattr(interaction, "group_member_openid", "") or "")
+        data = getattr(getattr(interaction, "data", None), "resolved", None)
+        button = str(getattr(data, "button_data", "") or "")
+        if button.startswith("waifu_swap:"):
+            match = re.fullmatch(r"waifu_swap:(\d{4}-\d{2}-\d{2}):([a-f0-9]{32}):([a-f0-9]{24})", button)
+            if not group or not member or not match or match.group(1) != datetime.now(ZoneInfo("Asia/Shanghai")).date().isoformat() or not hmac.compare_digest(
+                button, self.waifu_button_data(group, member, match.group(1), match.group(2))):
+                await self.api.on_interaction_result(interaction.id, 4)
+                return
+            acknowledged = False
+            try:
+                result = await self.call_service("/v1/waifu/swap", {
+                    "app_id": self.settings["app_id"], "group_openid": group,
+                    "member_openid": member, "draw_token": match.group(2)})
+                await self.api.on_interaction_result(interaction.id, 0)
+                acknowledged = True
+                await self.send_waifu_card(group, result, event_id=interaction.id)
+            except Exception:
+                log.exception("QQ waifu exchange interaction failed")
+                if not acknowledged:
+                    try:
+                        await self.api.on_interaction_result(interaction.id, 1)
+                    except Exception:
+                        pass
+            return
+        if not group or not member or not button.startswith("expand:"):
+            await self.api.on_interaction_result(interaction.id, 1)
+            return
+        token = button[len("expand:"):]
+        acknowledged = False
+        try:
+            role = await self.role_for(group, member)
+            if role not in ("owner", "admin"):
+                await self.api.on_interaction_result(interaction.id, 4)
+                return
+            content = await self.reply_store().load(group, token)
+            if not content:
+                await self.api.on_interaction_result(interaction.id, 1)
+                return
+            await self.api.on_interaction_result(interaction.id, 0)
+            acknowledged = True
+            await self.post_full(group, content, event_id=interaction.id)
+        except Exception:
+            log.exception("QQ expansion interaction failed")
+            if not acknowledged:
+                try:
+                    await self.api.on_interaction_result(interaction.id, 1)
+                except Exception:
+                    pass
+
+    async def on_group_message_create(self, message, explicit_at=False):
+        already_seen = self.duplicate("group", message.id)
+        if already_seen and not explicit_at:
             return
         if getattr(message.author, "bot", False):
             return
-        text = re.sub(r"^<@!?[^>]+>\s*", "", message.content or "").strip()
+        raw_text = message.content or ""
+        # A full group event may start with @another member. Only the official
+        # GROUP_AT_MESSAGE_CREATE event proves the bot itself was mentioned.
+        text = re.sub(r"^<@!?[^>]+>\s*", "", raw_text).strip()
         # Commands remain available when QQ switches @ events to full-message events.
         if not text and not getattr(message, "attachments", None) and not (getattr(message, "raw_data", {}).get("msg_elements")):
             return
-        if re.match(r"^/?(?:设置头衔|清除头衔|绑定Java|绑定基岩|关联基岩|我的绑定|换绑Java|换绑基岩|解绑|解除关联|帮助|help|本群ID|群服互通|绑定|换绑|引导验证)(?:\s|$)", text, re.I):
-            await message.reply(content=await self.group_response(message))
+        group = str(getattr(message, "group_openid", "") or "")
+        member = str(getattr(getattr(message, "author", None), "member_openid", "") or "")
+        allowed = self.settings.get("chat_bridge", {}).get("command_groups", self.settings.get("allowed_groups", []))
+        group_ai = getattr(self, "group_ai", None)
+        if already_seen:
+            if group_ai and explicit_at and group in allowed and member and text and not text.startswith("/"):
+                checked = group_ai.check(text)
+                if checked is not None:
+                    await self.reply_group_text(message, await group_ai.reply(group, checked, member), translate=False)
+            return
+        if group_ai and group in allowed and member:
+            checked = text if text.startswith("/") else group_ai.check(text)
+            if checked is None:
+                return
+            await group_ai.capture(message, group, member, checked)
+            if re.fullmatch(r"/历史讯息向量化", text):
+                role = await self.role_for(group, member)
+                response = (await group_ai.summarize(group) if role in ("owner", "admin")
+                            else "只有 Bot 主人或管理可以整理历史讯息。")
+                await self.reply_group_text(message, response)
+                return
+            if explicit_at and text and not text.startswith("/"):
+                await self.reply_group_text(message, await group_ai.reply(group, checked, member), translate=False)
+                return
+        if re.fullmatch(r"/今日老婆\s+重置", text):
+            await self.daily_waifu_reset(message)
+            return
+        if re.fullmatch(r"/今日老婆", text):
+            await self.daily_waifu_reply(message)
+            return
+        if re.fullmatch(r"/换老婆", text):
+            await self.daily_waifu_reply(message, action="swap")
+            return
+        expansion = re.fullmatch(r"/展开\s+([A-Za-z0-9_-]{8,64})", text)
+        if expansion:
+            group = str(getattr(message, "group_openid", "") or "")
+            member = str(getattr(getattr(message, "author", None), "member_openid", "") or "")
+            result = await self.send_expanded(group, expansion.group(1), member, msg_id=message.id)
+            if result is not True:
+                await self.send_group_text(group, "没有展开权限，或内容已过期。", msg_id=message.id)
+            return
+        if re.match(r"^/(?:服务器|在线|状态情报|设置头衔|清除头衔|设bot管理|取缔bot管理|绑定Java|绑定基岩|关联基岩|我的绑定|换绑Java|换绑基岩|解绑|解除关联|帮助|help|本群ID|群服互通|跨群信息|大发命令|发命令|绑定|换绑|引导验证)(?:\s|$)", text, re.I):
+            answer = await self.group_response(message)
+            preserve_output = re.match(r"^/(?:大发命令|发命令|跨群信息)\s", text)
+            await self.reply_group_text(message, answer, translate=not bool(preserve_output))
         else:
             await self.relay_group(message)
 
@@ -277,7 +662,7 @@ class QQBot(botpy.Client):
         if self.afterglow is None: return
         reply = await self.afterglow.respond(user, text)
         if reply:
-            await message.reply(content=reply)
+            await message.reply(content=plain_game_output(reply))
 
 
 def main():
@@ -285,7 +670,7 @@ def main():
     # The SDK creates clients against the current event loop, including on Python 3.14.
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    bot = QQBot(settings, intents=botpy.Intents(public_messages=True))
+    bot = QQBot(settings, intents=botpy.Intents(public_messages=True, interaction=True))
     try:
         bot.run(appid=settings["app_id"], secret=settings["app_secret"])
     finally:

@@ -10,20 +10,23 @@ from .config import load
 from .profiles import resolve
 from .store import BindingError, Store
 from . import launcher
+from . import server_status
 
 log = logging.getLogger(__name__)
 SESSION = web.AppKey("session", aiohttp.ClientSession)
 
 
-def create_app(cfg, resolver=resolve):
+def create_app(cfg, resolver=resolve, *, status_clock=None, status_monotonic=None):
     store = Store(cfg["database"], cfg.get("rebind_cooldown_seconds", 60))
 
     @web.middleware
     async def auth(request, handler):
+        if request.path in (server_status.SNAPSHOTS_PATH, server_status.QUERY_PATH):
+            return await server_status.authorized_request(request, cfg, handler)
         if request.path == "/healthz":
             return await handler(request)
         if request.path not in launcher.PUBLIC_PATHS:
-            key = "proxy_token" if request.path in ("/v1/authorize", "/v1/link", "/v1/verify", "/v1/status", "/v1/chat/from-game", "/v1/chat/to-game", "/v1/chat/ack-game") else "bot_token"
+            key = "proxy_token" if request.path in ("/v1/authorize", "/v1/link", "/v1/verify", "/v1/status", "/v1/chat/from-game", "/v1/chat/to-game", "/v1/chat/ack-game", "/v1/command/poll", "/v1/command/complete") else "bot_token"
             if not hmac.compare_digest(request.headers.get("Authorization", ""), "Bearer " + cfg[key]):
                 raise web.HTTPUnauthorized()
         try:
@@ -136,8 +139,13 @@ def create_app(cfg, resolver=resolve):
     from . import media
     media_resolver, _, _ = media.register(app, cfg, store)
     chat.register(app, cfg, store, identity, lambda raw: media_resolver(app[SESSION], raw))
+    from . import remote_commands
+    remote_commands.register(app, cfg, store, identity)
+    from . import daily_waifu
+    daily_waifu.register(app, cfg, identity)
     from . import titles
     titles.register(app, cfg, store, identity)
+    server_status.register(app, cfg, identity, clock=status_clock, monotonic=status_monotonic)
     return app
 
 

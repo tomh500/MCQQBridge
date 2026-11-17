@@ -1,0 +1,602 @@
+[
+  {
+    "id": 88572,
+    "name": "Emilia",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b88572-IzTwXEHSobRs.jpg",
+    "source_url": "https://anilist.co/character/88572"
+  },
+  {
+    "id": 40881,
+    "name": "Mikasa Ackerman",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b40881-F3gr1PkreDvj.png",
+    "source_url": "https://anilist.co/character/40881"
+  },
+  {
+    "id": 126824,
+    "name": "Maomao",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b126824-MqsCncTO1qpv.png",
+    "source_url": "https://anilist.co/character/126824"
+  },
+  {
+    "id": 176754,
+    "name": "Frieren",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b176754-PCnpqIOkjhFk.png",
+    "source_url": "https://anilist.co/character/176754"
+  },
+  {
+    "id": 34470,
+    "name": "Kurisu Makise",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b34470-Jw2LXZBL5R8i.png",
+    "source_url": "https://anilist.co/character/34470"
+  },
+  {
+    "id": 137080,
+    "name": "Makima",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b137080-UHcynYNjb5ZU.png",
+    "source_url": "https://anilist.co/character/137080"
+  },
+  {
+    "id": 127222,
+    "name": "Mai Sakurajima",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b127222-Jh5hhP7vZ7s1.png",
+    "source_url": "https://anilist.co/character/127222"
+  },
+  {
+    "id": 137079,
+    "name": "Power",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b137079-6yLEUYR3bmpr.png",
+    "source_url": "https://anilist.co/character/137079"
+  },
+  {
+    "id": 90169,
+    "name": "Violet Evergarden",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b90169-4wr1Zehnsac8.png",
+    "source_url": "https://anilist.co/character/90169"
+  },
+  {
+    "id": 120649,
+    "name": "Kaguya Shinomiya",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b120649-NPaWaIpWy60E.png",
+    "source_url": "https://anilist.co/character/120649"
+  },
+  {
+    "id": 500,
+    "name": "Sakura Matou",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b500-NQrLbnBr1sDv.png",
+    "source_url": "https://anilist.co/character/500"
+  },
+  {
+    "id": 133676,
+    "name": "Marin Kitagawa",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b133676-kV2czE3C8Qls.png",
+    "source_url": "https://anilist.co/character/133676"
+  },
+  {
+    "id": 89361,
+    "name": "Megumin",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b89361-tq8PQQ4MmF0M.png",
+    "source_url": "https://anilist.co/character/89361"
+  },
+  {
+    "id": 88575,
+    "name": "Rem",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b88575-Ayu8UPDA8NS6.png",
+    "source_url": "https://anilist.co/character/88575"
+  },
+  {
+    "id": 121103,
+    "name": "Chika Fujiwara",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b121103-UGLxT8utLPnq.png",
+    "source_url": "https://anilist.co/character/121103"
+  },
+  {
+    "id": 126375,
+    "name": "Itsuki Nakano",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b126375-dEe9IyQ9By09.png",
+    "source_url": "https://anilist.co/character/126375"
+  },
+  {
+    "id": 124382,
+    "name": "Ichigo",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b124382-bSBkjtYjJQtr.png",
+    "source_url": "https://anilist.co/character/124382"
+  },
+  {
+    "id": 125886,
+    "name": "Miko Iino",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b125886-TQbmqAaSgBLS.png",
+    "source_url": "https://anilist.co/character/125886"
+  },
+  {
+    "id": 61,
+    "name": "Robin Nico",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b61-ywXUyyocEEqt.png",
+    "source_url": "https://anilist.co/character/61"
+  },
+  {
+    "id": 94,
+    "name": "Asuka Langley Souryuu",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b94-d631a3Z2KPvd.png",
+    "source_url": "https://anilist.co/character/94"
+  },
+  {
+    "id": 22037,
+    "name": "Hitagi Senjougahara",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b22037-sY7GWSKYr2Nl.jpg",
+    "source_url": "https://anilist.co/character/22037"
+  },
+  {
+    "id": 124381,
+    "name": "Zero Two",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b124381-2gAVq76HPfL2.png",
+    "source_url": "https://anilist.co/character/124381"
+  },
+  {
+    "id": 127518,
+    "name": "Nezuko Kamado",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b127518-NRlq1CQ1v1ro.png",
+    "source_url": "https://anilist.co/character/127518"
+  },
+  {
+    "id": 138102,
+    "name": "Yor Forger",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b138102-ZOAu9jI2d5ke.png",
+    "source_url": "https://anilist.co/character/138102"
+  },
+  {
+    "id": 23602,
+    "name": "Shinobu Oshino",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b23602-Z4MDNYcoAWZu.png",
+    "source_url": "https://anilist.co/character/23602"
+  },
+  {
+    "id": 133700,
+    "name": "Nobara Kugisaki",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b133700-f6sOO3TcgLV6.png",
+    "source_url": "https://anilist.co/character/133700"
+  },
+  {
+    "id": 138100,
+    "name": "Anya Forger",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b138100-4Li0tWRCa5bQ.png",
+    "source_url": "https://anilist.co/character/138100"
+  },
+  {
+    "id": 134167,
+    "name": "Maki Zenin",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b134167-5TCytk45YByD.png",
+    "source_url": "https://anilist.co/character/134167"
+  },
+  {
+    "id": 498,
+    "name": "Rin Toosaka",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b498-lwawtSpLyATL.png",
+    "source_url": "https://anilist.co/character/498"
+  },
+  {
+    "id": 257562,
+    "name": "Hitori Gotou",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b257562-Ru35NYPfsqhY.png",
+    "source_url": "https://anilist.co/character/257562"
+  },
+  {
+    "id": 38005,
+    "name": "Homura Akemi",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b38005-T3NR8p2f021x.jpg",
+    "source_url": "https://anilist.co/character/38005"
+  },
+  {
+    "id": 497,
+    "name": "Artoria Pendragon",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b497-Yg5pNmC8kxzs.png",
+    "source_url": "https://anilist.co/character/497"
+  },
+  {
+    "id": 188783,
+    "name": "Kana Arima",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b188783-77orwP7vNuNg.png",
+    "source_url": "https://anilist.co/character/188783"
+  },
+  {
+    "id": 66171,
+    "name": "Kyouko Hori",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b66171-o2vk3689wWFK.png",
+    "source_url": "https://anilist.co/character/66171"
+  },
+  {
+    "id": 86,
+    "name": "Rei Ayanami",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/86-cA1zL7fyls8E.jpg",
+    "source_url": "https://anilist.co/character/86"
+  },
+  {
+    "id": 80243,
+    "name": "Shouko Nishimiya",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b80243-RzxE51iUU5eq.png",
+    "source_url": "https://anilist.co/character/80243"
+  },
+  {
+    "id": 88350,
+    "name": "Roxy Migurdia",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b88350-QU1iwgZ887U8.png",
+    "source_url": "https://anilist.co/character/88350"
+  },
+  {
+    "id": 126373,
+    "name": "Miku Nakano",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b126373-CWeyXb822uDN.png",
+    "source_url": "https://anilist.co/character/126373"
+  },
+  {
+    "id": 1259,
+    "name": "Misato Katsuragi",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b1259-afTQkZ5SVMOn.png",
+    "source_url": "https://anilist.co/character/1259"
+  },
+  {
+    "id": 1111,
+    "name": "C.C.",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b1111-UhmlFtRFrnWa.png",
+    "source_url": "https://anilist.co/character/1111"
+  },
+  {
+    "id": 121104,
+    "name": "Ai Hayasaka",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b121104-7TYRl3EEsDYU.png",
+    "source_url": "https://anilist.co/character/121104"
+  },
+  {
+    "id": 126372,
+    "name": "Nino Nakano",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b126372-DtorHRgQaYUJ.png",
+    "source_url": "https://anilist.co/character/126372"
+  },
+  {
+    "id": 148740,
+    "name": "Reze",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b148740-ceAibPxLW8rR.png",
+    "source_url": "https://anilist.co/character/148740"
+  },
+  {
+    "id": 723,
+    "name": "Nami",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b723-vp5hPptgnNEC.png",
+    "source_url": "https://anilist.co/character/723"
+  },
+  {
+    "id": 141061,
+    "name": "Vladilena Milizé",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b141061-jqIhB9jmClQ3.png",
+    "source_url": "https://anilist.co/character/141061"
+  },
+  {
+    "id": 36828,
+    "name": "Asuna Yuuki",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b36828-j5ib0adAzGMx.png",
+    "source_url": "https://anilist.co/character/36828"
+  },
+  {
+    "id": 174873,
+    "name": "Kurena Kukumila",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b174873-FNf08aPYTVXY.jpg",
+    "source_url": "https://anilist.co/character/174873"
+  },
+  {
+    "id": 67067,
+    "name": "Yukino Yukinoshita",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b67067-gqhgjlni0Bcf.png",
+    "source_url": "https://anilist.co/character/67067"
+  },
+  {
+    "id": 154224,
+    "name": "Mami Nanami",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b154224-7dJ09BKEnG3v.png",
+    "source_url": "https://anilist.co/character/154224"
+  },
+  {
+    "id": 125659,
+    "name": "Gabi Braun",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b125659-O37MZQWibV7g.png",
+    "source_url": "https://anilist.co/character/125659"
+  },
+  {
+    "id": 136070,
+    "name": "Shinobu Kochou",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b136070-MC9LLxJsHyHE.png",
+    "source_url": "https://anilist.co/character/136070"
+  },
+  {
+    "id": 69411,
+    "name": "Kaori Miyazono",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b69411-lxM0FRvWHqlv.png",
+    "source_url": "https://anilist.co/character/69411"
+  },
+  {
+    "id": 284157,
+    "name": "Lucy",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b284157-cqYawN7XCNJx.jpg",
+    "source_url": "https://anilist.co/character/284157"
+  },
+  {
+    "id": 207,
+    "name": "Tooru Honda",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b207-RQ4EUdTD0K62.png",
+    "source_url": "https://anilist.co/character/207"
+  },
+  {
+    "id": 183965,
+    "name": "Fern",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b183965-uGFohBjlFoTp.png",
+    "source_url": "https://anilist.co/character/183965"
+  },
+  {
+    "id": 121889,
+    "name": "Yumeko Jabami",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b121889-ABsurpy5SjOW.png",
+    "source_url": "https://anilist.co/character/121889"
+  },
+  {
+    "id": 81929,
+    "name": "Tatsumaki",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b81929-WPVp2LQoWgkc.png",
+    "source_url": "https://anilist.co/character/81929"
+  },
+  {
+    "id": 12064,
+    "name": "Taiga Aisaka",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b12064-7PDN3ylIeAZn.png",
+    "source_url": "https://anilist.co/character/12064"
+  },
+  {
+    "id": 87277,
+    "name": "Touka Kirishima",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b87277-oUaqrI1iBzu6.png",
+    "source_url": "https://anilist.co/character/87277"
+  },
+  {
+    "id": 45887,
+    "name": "Sasha Blouse",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b45887-QPtJH0KwqthW.jpg",
+    "source_url": "https://anilist.co/character/45887"
+  },
+  {
+    "id": 89362,
+    "name": "Aqua",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b89362-ibkc0eoECaW1.png",
+    "source_url": "https://anilist.co/character/89362"
+  },
+  {
+    "id": 458,
+    "name": "Revy",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b458-tlKqPcuR287U.png",
+    "source_url": "https://anilist.co/character/458"
+  },
+  {
+    "id": 83797,
+    "name": "Ryuuko Matoi",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b83797-ix0Cl5OMfV22.png",
+    "source_url": "https://anilist.co/character/83797"
+  },
+  {
+    "id": 2219,
+    "name": "Lain Iwakura",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b2219-K3wzEOVwdUhL.png",
+    "source_url": "https://anilist.co/character/2219"
+  },
+  {
+    "id": 702,
+    "name": "Nana Oosaki",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b702-qqO3zbj5hp1l.png",
+    "source_url": "https://anilist.co/character/702"
+  },
+  {
+    "id": 11222,
+    "name": "Jolyne Kuujou",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b11222-Se9QoJHDSeYY.png",
+    "source_url": "https://anilist.co/character/11222"
+  },
+  {
+    "id": 70069,
+    "name": "Kurumi Tokisaki",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b70069-DEV7X6o2L7oG.jpg",
+    "source_url": "https://anilist.co/character/70069"
+  },
+  {
+    "id": 65865,
+    "name": "Rikka Takanashi",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b65865-AC0ru7cDXUgK.png",
+    "source_url": "https://anilist.co/character/65865"
+  },
+  {
+    "id": 121956,
+    "name": "Shouko Komi",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b121956-5FbIbcd6gAZW.png",
+    "source_url": "https://anilist.co/character/121956"
+  },
+  {
+    "id": 22055,
+    "name": "Tsubasa Hanekawa",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b22055-EaTsy30ihdgb.png",
+    "source_url": "https://anilist.co/character/22055"
+  },
+  {
+    "id": 6,
+    "name": "Rukia Kuchiki",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b6-25WoBeWMZXBc.png",
+    "source_url": "https://anilist.co/character/6"
+  },
+  {
+    "id": 88349,
+    "name": "Eris Boreas Greyrat",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b88349-5dsNUah3oBj8.png",
+    "source_url": "https://anilist.co/character/88349"
+  },
+  {
+    "id": 222594,
+    "name": "Momo Ayase",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b222594-24Jn7qlI5spH.png",
+    "source_url": "https://anilist.co/character/222594"
+  },
+  {
+    "id": 260329,
+    "name": "Chisato Nishikigi",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b260329-1Z5n1QgViEBI.png",
+    "source_url": "https://anilist.co/character/260329"
+  },
+  {
+    "id": 908,
+    "name": "Yoruichi Shihouin",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b908-JSYUkJLCw1f0.png",
+    "source_url": "https://anilist.co/character/908"
+  },
+  {
+    "id": 835,
+    "name": "Misa Amane",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b835-CiZa8y2z2gCz.png",
+    "source_url": "https://anilist.co/character/835"
+  },
+  {
+    "id": 5189,
+    "name": "Erza Scarlet",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b5189-GR1xdok9SFsN.jpg",
+    "source_url": "https://anilist.co/character/5189"
+  },
+  {
+    "id": 7373,
+    "name": "Holo",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b7373-1BH0gELuZmHD.jpg",
+    "source_url": "https://anilist.co/character/7373"
+  },
+  {
+    "id": 63351,
+    "name": "Akame",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b63351-0WmsDENpiscp.png",
+    "source_url": "https://anilist.co/character/63351"
+  },
+  {
+    "id": 261674,
+    "name": "Nijika Ijichi",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b261674-a8tJYvtzqWgC.png",
+    "source_url": "https://anilist.co/character/261674"
+  },
+  {
+    "id": 168774,
+    "name": "Nazuna Nanakusa",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b168774-zoB9InjmXYq2.png",
+    "source_url": "https://anilist.co/character/168774"
+  },
+  {
+    "id": 218648,
+    "name": "Hina Chouno",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b218648-kXxXy8lPkeGV.png",
+    "source_url": "https://anilist.co/character/218648"
+  },
+  {
+    "id": 2,
+    "name": "Faye Valentine",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b2-0Iszg6Izgt4p.png",
+    "source_url": "https://anilist.co/character/2"
+  },
+  {
+    "id": 88889,
+    "name": "Raphtalia",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b88889-CWYytVbCOPsV.png",
+    "source_url": "https://anilist.co/character/88889"
+  },
+  {
+    "id": 128106,
+    "name": "Chizuru Ichinose",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b128106-zSTsuULvz6PX.png",
+    "source_url": "https://anilist.co/character/128106"
+  },
+  {
+    "id": 65239,
+    "name": "Esdeath",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b65239-2S3t2vSyUew9.png",
+    "source_url": "https://anilist.co/character/65239"
+  },
+  {
+    "id": 264529,
+    "name": "Ryou Yamada",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b264529-BvEusZnJLD2Y.png",
+    "source_url": "https://anilist.co/character/264529"
+  },
+  {
+    "id": 136072,
+    "name": "Mitsuri Kanroji",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b136072-xVwyRUKdpybi.png",
+    "source_url": "https://anilist.co/character/136072"
+  },
+  {
+    "id": 203384,
+    "name": "Akane Kurokawa",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b203384-YuSppFDMw2wn.png",
+    "source_url": "https://anilist.co/character/203384"
+  },
+  {
+    "id": 121052,
+    "name": "Tanya Degurechaff",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b121052-bQZT3nIvaryX.png",
+    "source_url": "https://anilist.co/character/121052"
+  },
+  {
+    "id": 172759,
+    "name": "Ai Hoshino",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b172759-cccVhJ2fQA92.png",
+    "source_url": "https://anilist.co/character/172759"
+  },
+  {
+    "id": 50389,
+    "name": "Rias Gremory",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b50389-gIhJkyk8xj1P.png",
+    "source_url": "https://anilist.co/character/50389"
+  },
+  {
+    "id": 19565,
+    "name": "Yui Hirasawa",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b19565-7gMiEAm7NGNK.png",
+    "source_url": "https://anilist.co/character/19565"
+  },
+  {
+    "id": 67069,
+    "name": "Yui Yuigahama",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b67069-6B3xnHfJUO0F.png",
+    "source_url": "https://anilist.co/character/67069"
+  },
+  {
+    "id": 19566,
+    "name": "Mio Akiyama",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b19566-XKsMgf370b4m.png",
+    "source_url": "https://anilist.co/character/19566"
+  },
+  {
+    "id": 245466,
+    "name": "Aira Shiratori",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b245466-rd5I5mchZ3bv.png",
+    "source_url": "https://anilist.co/character/245466"
+  },
+  {
+    "id": 674,
+    "name": "Kagura",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b674-w8wCh0A5Qa8R.png",
+    "source_url": "https://anilist.co/character/674"
+  },
+  {
+    "id": 125619,
+    "name": "Himiko Toga",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b125619-iQxQoGHJvjRJ.png",
+    "source_url": "https://anilist.co/character/125619"
+  },
+  {
+    "id": 1555,
+    "name": "Hinata Hyuuga",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b1555-Q41GLTV3FvYF.png",
+    "source_url": "https://anilist.co/character/1555"
+  },
+  {
+    "id": 282389,
+    "name": "Asa Mitaka",
+    "image_url": "https://s4.anilist.co/file/anilistcdn/character/large/b282389-Mr4vAa8Du2Jx.jpg",
+    "source_url": "https://anilist.co/character/282389"
+  }
+]

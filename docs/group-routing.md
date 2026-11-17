@@ -1,13 +1,13 @@
 # 按群设置聊天互通
 
-配置文件属于 Python 机器人服务，在服务器上是 `/home/ubuntu/qqbot-mc/settings.json`。请不要把它或其中的凭据提交到公开仓库。
+配置文件属于 Python 机器人服务。以下示例使用 `~/mcqq-bridge/settings.json`；请替换为你的实际部署目录，且不要把配置文件或其中的凭据提交到公开仓库。
 
 1. 在各 QQ 群里向机器人发送 `/本群ID`，记下返回的 `group_openid`。使用这个值，不要填写数字群号。
 2. SSH 登录服务器后，先备份配置：
 
    ```sh
-   cp -p ~/qqbot-mc/settings.json ~/qqbot-mc/settings.json.before-group-routing
-   nano ~/qqbot-mc/settings.json
+   cp -p ~/mcqq-bridge/settings.json ~/mcqq-bridge/settings.json.before-group-routing
+   nano ~/mcqq-bridge/settings.json
    ```
 
 3. 找到原有的 `allowed_groups` 和 `chat_bridge`，编辑这几项，保留文件中其他原有字段：
@@ -26,7 +26,7 @@
 4. nano 中按 Ctrl+O、回车保存，再按 Ctrl+X 退出。检查 JSON 格式，然后重启并逐个确认服务：
 
    ```sh
-   python3 -m json.tool ~/qqbot-mc/settings.json >/dev/null && echo 'JSON 格式正确'
+   python3 -m json.tool ~/mcqq-bridge/settings.json >/dev/null && echo 'JSON 格式正确'
    systemctl --user restart mcqq-api
    systemctl --user start mcqq-bot
    systemctl --user is-active mcqq-api
@@ -38,7 +38,7 @@
 如果启动失败，可用备份还原并重新启动两个服务：
 
 ```sh
-cp -p ~/qqbot-mc/settings.json.before-group-routing ~/qqbot-mc/settings.json
+cp -p ~/mcqq-bridge/settings.json.before-group-routing ~/mcqq-bridge/settings.json
 systemctl --user restart mcqq-api
 systemctl --user start mcqq-bot
 ```

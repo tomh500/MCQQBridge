@@ -37,6 +37,7 @@ public final class UniversalImages implements ClientModInitializer {
     private URI enlarged;
     private ImageViewer viewer;
     private int viewerWidth,viewerHeight,mouseX,mouseY;
+    private int leftButton,escapeKey;
     static final class Preview {
         final String caption; final long created=System.currentTimeMillis();
         final List<Object> frames=new ArrayList<>(); final List<Integer> delays=new ArrayList<>();
@@ -53,6 +54,8 @@ public final class UniversalImages implements ClientModInitializer {
         try {
             loadMediaConfig();
             bridge=new Bridge(version);
+            leftButton=(int)bridge.field(null,"com.mojang.blaze3d.platform.InputConstants","MOUSE_BUTTON_LEFT");
+            escapeKey=(int)bridge.field(null,"com.mojang.blaze3d.platform.InputConstants","KEY_ESCAPE");
             // Resolve essential members before hooking events: a bad adapter cannot
             // break incoming chat or repeatedly throw on the render thread.
             bridge.type(COMPONENT); pipeline=bridge.pipeline();
@@ -106,6 +109,7 @@ public final class UniversalImages implements ClientModInitializer {
         bridge.call(result,"net.minecraft.network.chat.MutableComponent","append",cleaned);
         List<Map.Entry<URI,LinkSlot>> slots=new ArrayList<>();
         collectSlots(result,slots);
+        System.out.println("[MCQQ Images] Media message: links="+links.size()+" fallbackSlots="+slots.size());
         for(URI uri:links) {
             String marker=MARKER+UUID.randomUUID(); imageMarkers.put(marker,uri);
             for(var iterator=slots.iterator();iterator.hasNext();) {
@@ -132,7 +136,7 @@ public final class UniversalImages implements ClientModInitializer {
             String plain="net.minecraft.network.chat.contents.PlainTextContents";
             if(bridge.type(plain).isInstance(contents)) {
                 String text=(String)bridge.call(contents,plain,"text");
-                if((text.equals("[图片]") || text.equals("[表情包]")) && ((List<?>)bridge.call(child,COMPONENT,"getSiblings")).isEmpty()) {
+                if((text.trim().equals("[图片]") || text.trim().equals("[表情包]")) && ((List<?>)bridge.call(child,COMPONENT,"getSiblings")).isEmpty()) {
                     List<URI> found=new ArrayList<>(); findLinks(child,found);
                     if(!found.isEmpty()) {
                         Object wrapper=bridge.call(null,COMPONENT,"literal","");
@@ -196,7 +200,7 @@ public final class UniversalImages implements ClientModInitializer {
             Object screen=args[1];
             if(!bridge.type("net.minecraft.client.gui.screens.ChatScreen").isInstance(screen))return;
             enlarged=null; viewer=null; hits.clear();
-            try { registerMouse(screen); }
+            try { registerMouse(screen); System.out.println("[MCQQ Images] Chat viewer input registered"); }
             catch(Exception error) { System.err.println("[MCQQ Images] Image click integration unavailable: "+error); }
             Class<?> owner=Class.forName("net.fabricmc.fabric.api.client.screen.v1.ScreenEvents");
             String name=bridge.modern ? "afterExtract" : "afterRender";
@@ -227,22 +231,13 @@ public final class UniversalImages implements ClientModInitializer {
                     y=((Number)bridge.call(click,"net.minecraft.client.input.MouseButtonEvent","y")).doubleValue();
                     button=((Number)bridge.call(click,"net.minecraft.client.input.MouseButtonEvent","button")).intValue();
                 }
-                if(button!=0)return true;
-                if(enlarged!=null) {
-                    if(viewer!=null && !viewer.press(x,y,button,viewerWidth,viewerHeight)) { enlarged=null; viewer=null; }
-                    return false;
-                }
-                for(Hit hit:hits) if(x>=hit.x && x<hit.x+hit.width && y>=hit.y && y<hit.y+hit.height) {
-                    Preview image=previews.get(hit.uri.toString());
-                    if(image!=null && image.originalWidth>0 && !image.failed) {
-                        enlarged=hit.uri; viewer=new ImageViewer(image.originalWidth,image.originalHeight,new ImageViewer.Rect(hit.x,hit.y,hit.width,hit.height),System.currentTimeMillis());
-                    }
-                    return false;
-                }
+                boolean handled=handleClick(x,y,button);
+                if(button==leftButton) System.out.println("[MCQQ Images] Chat click: x="+(int)x+" y="+(int)y+" imageRegions="+hits.size()+" handled="+handled);
+                return !handled;
             } catch(Exception error) { System.err.println("[MCQQ Images] Image click unavailable: "+error); }
             return true;
         });
-        eventType.getMethod("register",Object.class).invoke(event,listener);
+        registerViewerListener(event,eventType,listener);
         registerViewerEvent(owner,screen,"allowMouseRelease",args -> { if(viewer==null)return true; viewer.release(); return false; });
         registerViewerEvent(owner,screen,"allowMouseScroll",args -> {
             if(viewer==null)return true;
@@ -252,9 +247,24 @@ public final class UniversalImages implements ClientModInitializer {
         registerViewerEvent(keyboard,screen,"allowKeyPress",args -> {
             if(viewer==null)return true;
             int key=args.length>=4 ? ((Number)args[1]).intValue() : ((Number)bridge.call(args[1],"net.minecraft.client.input.KeyEvent","key")).intValue();
-            if(key==256) { enlarged=null; viewer=null; return false; }
+            if(key==escapeKey) { enlarged=null; viewer=null; return false; }
             return true;
         });
+    }
+    private boolean handleClick(double x,double y,int button) {
+        if(button!=leftButton)return false;
+        if(enlarged!=null) {
+            if(viewer!=null && !viewer.press(x,y,viewerWidth,viewerHeight)) { enlarged=null; viewer=null; }
+            return true;
+        }
+        for(Hit hit:hits) if(x>=hit.x && x<hit.x+hit.width && y>=hit.y && y<hit.y+hit.height) {
+            Preview image=previews.get(hit.uri.toString());
+            if(image!=null && image.originalWidth>0 && image.originalHeight>0 && !image.failed && !image.frames.isEmpty()) {
+                enlarged=hit.uri; viewer=new ImageViewer(image.originalWidth,image.originalHeight,new ImageViewer.Rect(hit.x,hit.y,hit.width,hit.height),System.currentTimeMillis());
+                return true;
+            }
+        }
+        return false;
     }
     @FunctionalInterface interface AllowEvent { boolean allow(Object[] args) throws Exception; }
     private void registerViewerEvent(Class<?> owner,Object screen,String name,AllowEvent body) throws Exception {
@@ -267,7 +277,19 @@ public final class UniversalImages implements ClientModInitializer {
             };
             try { return body.allow(args); } catch(Exception error) { System.err.println("[MCQQ Images] Viewer input failed: "+error); return true; }
         });
-        eventType.getMethod("register",Object.class).invoke(event,listener);
+        registerViewerListener(event,eventType,listener);
+    }
+    private void registerViewerListener(Object event,Class<?> eventType,Object listener) throws Exception {
+        // Another mod may consume Fabric's default-phase mouse event before
+        // the image viewer sees it. Run our narrow hit test before that phase.
+        Class<?> idType=bridge.type(bridge.idClass()); Object phase=bridge.id("viewer_input");
+        try {
+            Object defaultPhase=eventType.getField("DEFAULT_PHASE").get(null);
+            eventType.getMethod("addPhaseOrdering",idType,idType).invoke(event,phase,defaultPhase);
+            eventType.getMethod("register",idType,Object.class).invoke(event,phase,listener);
+        } catch(NoSuchMethodException | NoSuchFieldException unsupported) {
+            eventType.getMethod("register",Object.class).invoke(event,listener);
+        }
     }
     private Preview preview(URI uri) throws Exception {
         String key=uri.toString(); Preview result=previews.get(key);
