@@ -22,6 +22,7 @@ from . import media
 from . import status_bot
 from . import system_info
 from . import reply_controls
+from .waifu_images import PortraitMaterials
 from .group_ai import GroupAI
 
 
@@ -202,7 +203,15 @@ class QQBot(botpy.Client):
         name = re.sub(r"[\[\]<>\n\r]", "", data["name"])
         work = re.sub(r"[\[\]<>\n\r]", "", data.get("work") or "未知作品")
         text = "本次免费更换，你的新老婆名字叫" if data.get("exchanged") else "你的今日老婆名字叫"
-        caption = f"![角色 #100px #150px]({data['image_url']})\n{mention}，{text}：{name}\n> 来自：{work}"
+        try:
+            images = getattr(self, "waifu_images", None)
+            if images is None:
+                self.waifu_images = images = PortraitMaterials(self.api, Path(self.settings["database"]).parent / "waifu-portraits")
+            portrait_url = await images.resolve(data["image_url"])
+        except Exception as exc:
+            log.warning("Waifu material unavailable (%s)", type(exc).__name__)
+            portrait_url = None
+        caption = (f"![角色 #100px #150px]({portrait_url})\n" if portrait_url else "") + f"{mention}，{text}：{name}\n> 来自：{work}"
         reference = {"msg_id": msg_id} if msg_id else {"event_id": event_id}
         rows = []
         if show_swap and data.get("new") and not data.get("swapped") and msg_id:

@@ -82,6 +82,8 @@ QQ 开放平台 / QQ 群
 
 角色目录来自 Bangumi 的动画角色与作品资料，使用 `deploy/build_waifu_catalog.py` 重新生成；卡片使用单条 QQ Markdown 消息承载头像、角色、作品及按钮，需要机器人具备相应 Markdown 权限。MongoDB 目录中的新角色须与内置目录对应；MongoDB 不可用时使用内置目录。旧版 AniList 抽取记录与新目录不兼容，切换前应备份并清理今日老婆记录。
 
+在可访问 Bangumi 图片的机器上运行 `python deploy/fetch_waifu_portraits.py <目录>`，将图片放到机器人数据库所在目录的 `waifu-portraits` 子目录。机器人按需将图片上传到 QQ 官方素材库，并复用同内容素材；素材库权限或配额不可用时卡片会省略图片，其他内容仍保持一条消息。
+
 ## 构建与升级
 
 代理运行 plugin/build.ps1；子服使用 Maven 3.9+ 执行 `mvn -f spigot/pom.xml package`，数据库驱动随子服 JAR 打包。源码构建需要服务器根目录 core 下的 BungeeCord.jar、spigot-1.12.2.jar 和 proxy 下的 BungeeChat JAR；Maven 可用 `-Dmcserver.root=绝对路径` 指定服务器根目录。输出分别为 mcqq-bridge-2.0.0.jar、mcqq-spigot-2.0.0.jar。
