@@ -15,7 +15,7 @@ import aiohttp
 import botpy
 
 from .afterglow import Afterglow
-from .commands import HELP, parse
+from .commands import HELP, expand_command_group, parse
 from .config import load
 from . import command_quota, launcher
 from botpy.message import GroupMessage
@@ -765,6 +765,13 @@ class QQBot(botpy.Client):
                     await group_ai.capture(message, group, member, raw_text, created=min(stamp, received).timestamp())
                 except Exception as error:
                     log.warning("Group message could not be cached (%s)", type(error).__name__)
+        if text.startswith("/"):
+            try:
+                text = expand_command_group(text)
+            except ValueError as error:
+                if not already_seen and member and group in allowed and group in authorized:
+                    await self.reply_group_text(message, str(error), translate=False)
+                return
         command, argument = match_group_command(text)
         if command:
             command = configure_group_command(command, self.settings)

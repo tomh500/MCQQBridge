@@ -266,22 +266,26 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
     def test_qq_panel_fields_fit_official_display_width_limits(self):
         from sync_commands import panel_config, display_width
         panel = panel_config()
-        self.assertEqual(len(panel["items"]), 20)
-        self.assertIn("群讯息情报统计", [item["name"] for item in panel["items"]])
-        self.assertIn("群友情报", [item["name"] for item in panel["items"]])
-        self.assertIn("跨群信息", [item["name"] for item in panel["items"]])
-        self.assertIn("发命令", [item["name"] for item in panel["items"]])
-        self.assertIn("大发命令", [item["name"] for item in panel["items"]])
-        self.assertIn("设bot管理", [item["name"] for item in panel["items"]])
-        self.assertIn("取缔bot管理", [item["name"] for item in panel["items"]])
-        self.assertIn("状态情报", [item["name"] for item in panel["items"]])
-        self.assertIn("今日老婆", [item["name"] for item in panel["items"]])
+        self.assertLessEqual(len(panel["items"]), 20)
+        self.assertEqual([item["name"] for item in panel["items"]],
+                         ["头衔", "群情报", "账号", "帮助", "跨群信息", "发命令", "服状态", "老婆"])
         self.assertEqual(display_width("本群ID"), 6)
         for item in panel["items"]:
             self.assertLessEqual(display_width(item["name"]), 14)
             self.assertLessEqual(display_width(item["desc"]), 30)
 
     def test_explicit_commands_and_action_specific_hints(self):
+        from mcqq.commands import expand_command_group
+
+        self.assertEqual(parse("/账号 换绑 基岩 Xbox Name"), ("rebind", "bedrock", "Xbox Name"))
+        self.assertEqual(parse("/账号 解绑 确认"), ("unbind", None, "确认"))
+        self.assertEqual(parse("/头衔 清除"), ("title_clear", None, ""))
+        self.assertEqual(parse("/服状态 系统"), ("system_info", None, None))
+        self.assertEqual(expand_command_group("/群情报 成员 <@!target>"), "/群友情报 <@!target>")
+        self.assertEqual(expand_command_group("/老婆 更换"), "/换老婆")
+        for command in ("/头衔", "/群情报", "/账号", "/服状态", "/老婆"):
+            with self.subTest(command=command), self.assertRaisesRegex(ValueError, command):
+                expand_command_group(command)
         self.assertEqual(parse("/发命令 survival /say  hi !"), ("game_command", "survival", "/say  hi !"))
         self.assertEqual(parse("/大发命令 总代 /end"), ("console_command", "proxy", "/end"))
         self.assertEqual(parse("/大发命令 ALL say hi @a"), ("console_command", "ALL", "/say hi @a"))

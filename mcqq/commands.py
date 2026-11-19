@@ -1,6 +1,13 @@
 import re
 
 HELP = """【MC 入服与双端共通】
+/账号 绑定|换绑 Java|基岩 游戏名；/账号 关联 Xbox昵称；/账号 查询|解绑|解除关联
+/头衔 设置 文字；/头衔 清除
+/服状态 在线|系统
+/群情报 今日|成员 @群友|重置
+/老婆 抽取|更换|许愿 角色名|积分点 查询|重置
+发送一级命令可查看详细用法。
+
 /服务器 或 /在线 —— 查看各服人数与状态快照
 只玩 Java：/绑定Java 游戏名
 只玩基岩：/绑定基岩 Xbox昵称
@@ -30,31 +37,58 @@ HELP = """【MC 入服与双端共通】
 每条命令前请 @机器人。名字中有空格可原样填写。"""
 
 COMMANDS = (
-    ("设置头衔", "自定义头衔最多10字"),
-    ("清除头衔", "清除自己的群服头衔"),
-    ("群讯息情报统计", "管理绘制今日群聊星图"),
-    ("群友情报", "选择群友生成聊天画像"),
-    ("绑定Java", "Java玩家入服"),
-    ("绑定基岩", "基岩玩家入服"),
-    ("关联基岩", "双端共用Java存档"),
-    ("我的绑定", "查看账号与下一步"),
-    ("换绑Java", "更换Java主账号"),
-    ("换绑基岩", "更换基岩主账号"),
-    ("解绑", "退出白名单"),
-    ("解除关联", "仅解除基岩关联"),
+    ("头衔", "设置或清除群服头衔"),
+    ("群情报", "查看今日统计和群友画像"),
+    ("账号", "绑定换绑双端关联及查询"),
     ("帮助", "查看完整使用步骤"),
     ("跨群信息", "向其他授权群发送消息"),
     ("发命令", "以绑定玩家身份执行游戏指令"),
-    ("大发命令", "以控制台身份执行指定服指令"),
-    ("设bot管理", "主人添加Bot管理"),
-    ("取缔bot管理", "主人移除Bot管理"),
-    ("状态情报", "查看机器系统运行和内存"),
-    ("今日老婆", "每日抽一位，可换一次"),
+    ("服状态", "在线人数或服务器系统状态"),
+    ("老婆", "每日抽取更换许愿和积分"),
 )
+
+COMMAND_GROUPS = {
+    "账号": ({
+        "绑定": ("绑定", True), "换绑": ("换绑", True), "关联": ("关联基岩", True),
+        "查询": ("我的绑定", False), "解绑": ("解绑", None), "解除关联": ("解除关联", None),
+    }, "/账号 绑定|换绑 Java|基岩 游戏名\n/账号 关联 Xbox昵称\n/账号 查询\n/账号 解绑 [确认]\n/账号 解除关联 [确认]"),
+    "头衔": ({
+        "设置": ("设置头衔", True), "清除": ("清除头衔", False),
+    }, "/头衔 设置 文字（最多10字）\n/头衔 清除"),
+    "服状态": ({
+        "在线": ("在线", False), "系统": ("状态情报", False),
+    }, "/服状态 在线\n/服状态 系统"),
+    "群情报": ({
+        "今日": ("群讯息情报统计", False), "成员": ("群友情报", True),
+        "重置": ("群友情报 重置", False),
+    }, "/群情报 今日\n/群情报 成员 @群友\n/群情报 重置（管理）"),
+    "老婆": ({
+        "抽取": ("今日老婆", False), "更换": ("换老婆", False),
+        "许愿": ("今日老婆 许愿", True), "积分点": ("今日老婆 积分点", True),
+        "重置": ("今日老婆 重置", False),
+    }, "/老婆 抽取\n/老婆 更换\n/老婆 许愿 角色名\n/老婆 积分点 查询 [@群友]\n"
+       "/老婆 积分点 添加|设为 @群友 数字（管理）\n/老婆 重置（主人）"),
+}
+
+
+def expand_command_group(text):
+    """Resolve the panel syntax to existing commands and keep their authorization paths."""
+    parts = text.split(maxsplit=2)
+    if not parts or parts[0].removeprefix("/") not in COMMAND_GROUPS:
+        return text
+    actions, usage = COMMAND_GROUPS[parts[0].removeprefix("/")]
+    action = actions.get(parts[1]) if len(parts) >= 2 else None
+    argument = parts[2] if len(parts) == 3 else ""
+    if action is None:
+        raise ValueError(usage)
+    command, needs_argument = action
+    if needs_argument is not None and needs_argument != bool(argument):
+        raise ValueError(usage)
+    return f"/{command} {argument}" if argument else f"/{command}"
 
 
 def parse(text):
-    text = re.sub(r"^<@!?[^>]+>\s*", "", text or "").strip().lstrip("/")
+    text = expand_command_group(re.sub(r"^<@!?[^>]+>\s*", "", text or "").strip()).lstrip("/")
     parts = text.split(maxsplit=2)
     if not parts or parts[0] in ("帮助", "help"):
         return "help", None, None
