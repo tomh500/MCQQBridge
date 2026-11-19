@@ -114,10 +114,12 @@ class FeaturePolicy:
                 return category
         return None
 
-    def check(self, group, category, *, consume=True):
+    def check(self, group, category, *, consume=True, schedule=None):
         rule = self.rule(group, category)
         if rule is None:
             return {'allowed': True}
+        if schedule is not None:
+            rule = {**rule, 'schedule': schedule}
         now = self.clock()
         allowed, limit = state(rule, now, self.holidays)
         if not allowed:

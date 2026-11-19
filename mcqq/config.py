@@ -22,6 +22,21 @@ def load():
     if daily.get("enabled") and daily.get("credentials_file"):
         credentials = read_mapping(path.parent / daily["credentials_file"])
         daily.update(credentials)
+    storage = cfg.get("group_ai_storage") or {}
+    if storage.get("credentials_file"):
+        credentials = read_mapping(path.parent / storage["credentials_file"])
+        storage = {**storage, **{section: {**storage.get(section, {}), **credentials.get(section, {})}
+                                for section in ("mongodb", "mysql", "redis")}}
+    if storage.get("credentials_from") == "daily_waifu":
+        defaults = {
+            "mongodb": {"uri": daily.get("mongo_uri"), "database": daily.get("mongo_database")},
+            "mysql": daily.get("mysql", {}),
+            "redis": {"url": daily.get("redis_url")},
+        }
+        storage = {**storage, **{section: {**values, **storage.get(section, {})}
+                                for section, values in defaults.items()}}
+    if storage:
+        cfg["group_ai_storage"] = storage
     if os.environ.get("MCQQ_STATUS_REPORTER_TOKEN"):
         cfg["status_reporter_token"] = os.environ["MCQQ_STATUS_REPORTER_TOKEN"]
     for key in ("database", "afterglow_connection"):
@@ -30,6 +45,8 @@ def load():
         cfg["group_ai_config"] = str((path.parent / cfg["group_ai_config"]).resolve())
     if cfg.get("group_ai_word_filter"):
         cfg["group_ai_word_filter"] = str(Path(cfg["group_ai_word_filter"]).resolve())
+    if cfg.get("daily_report_font"):
+        cfg["daily_report_font"] = str((path.parent / cfg["daily_report_font"]).resolve())
     for key in ("bot_token", "proxy_token"):
         if len(cfg.get(key, "")) < 32:
             raise ValueError(f"{key} must contain at least 32 random characters")
@@ -40,4 +57,7 @@ def load():
     inbound = cfg.get("chat_bridge", {}).get("inbound_groups", cfg.get("allowed_groups", []))
     if not isinstance(inbound, list) or any(g not in cfg.get("allowed_groups", []) for g in inbound):
         raise ValueError("inbound_groups must be a subset of allowed_groups")
+    reports = cfg.get("daily_report_groups", [])
+    if not isinstance(reports, list) or any(g not in cfg.get("allowed_groups", []) for g in reports):
+        raise ValueError("daily_report_groups must be a subset of allowed_groups")
     return cfg

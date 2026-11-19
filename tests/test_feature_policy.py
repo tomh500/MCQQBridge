@@ -128,7 +128,7 @@ class BotPolicyTests(unittest.IsolatedAsyncioTestCase):
             msg.id, msg.content = 'two', '你好'
             await bot.on_group_message_create(msg, explicit_at=True)
             bot.group_ai.reply.assert_not_awaited()
-            bot.group_ai.capture.assert_not_awaited()
+            self.assertEqual(bot.group_ai.capture.await_count, 2)
             self.assertEqual(bot.reply_group_text.await_args.args[1], '维护中暂不可用。')
 
     async def test_closed_button_does_not_exchange(self):

@@ -76,9 +76,49 @@ QQ 开放平台 / QQ 群
 
 修改 `mcqq/commands.py` 的 `COMMANDS` 后，发布时还必须在云端机器人运行目录执行 `.venv/bin/python sync_commands.py`，将命令同步到 QQ 官方 `/` 面板。脚本会回读并核对名称与描述；仅更新 Python 文件或重启 Bot 不会更新面板。
 
-群聊 AI 使用 `group_ai_config` 指向权限受限的 `group-ai.yml`（参考 `group-ai.example.yml`），并可通过 `group_ai_word_filter` 指向代理的 `config.yml` 与现有词库。仅 QQ 官方的「@机器人」事件且正文不以 `/` 开头时触发模型；全量群讯息里 @ 其他成员不会触发。`/历史讯息向量化` 仅 Bot 主人及管理可用，压缩时区分群与发言人的官方身份，并按群友昵称检索个人记忆。同名昵称不互认。每群只保留最近 300 条讯息；图片暂存总量上限 200 MiB，满额清空；摘要记忆每群最多 100 条。模型调用可沿用 Afterglow 的 OpenAI 相容端点，但群聊历史与私聊会话独立。输出超过五行时先发送预览；管理可按按钮或发送 `/展开 TOKEN` 查看全文，暂存 30 分钟。
+群聊 AI 通过 `group_ai_config` 读取权限受限的 `group-ai.yml`（参考 `group-ai.example.yml`），并可通过 `group_ai_word_filter` 使用代理词库。群内 @ 机器人且正文不以 `/` 开头时触发群聊模型，同时支持 QQ 的专用 @ 事件和全量群消息。Bot 主人或管理可用 `/历史讯息向量化` 分批压缩本群尚未清理的全部缓存，按官方群和成员标识保存可检索的向量记忆。同名昵称不会关联到同一人。群聊原始记录按北京时间保留，图片暂存上限为单张 8 MiB、总量 200 MiB。摘要记忆长期保存。群与私聊使用独立会话，长回复必要时分条发送。
 
-`/今日老婆` 使用 MySQL 保存每日结果与一次换取状态，MongoDB 保存可筛选角色目录。首次抽取附「换老婆」和「就这个了」按钮；每天最多换一次，确认后不能再换，重复点击只取回同一位。按钮不可用时可输入 `/换老婆`。主人可用 `/今日老婆 重置` 清除当天所有人的抽取与换取次数；旧按钮随抽取代号失效。既有资料库需执行 `deploy/daily_waifu_swap_20261117.sql` 升级资料表。Redis 仅存短期回覆快取，过期自动清除；每日结果始终读 MySQL，确保重置或换取后不返回旧资料。资料库专用帐号应由部署者建立，凭据保存在不纳入 Git 的 `.private-daily-waifu.json`。原有绑定、队列和权限仍在 SQLite，避免迁移线上资料。
+全量群消息模式下，将 `group_ai_mention_openid` 设置为 QQ 全量事件中 @ 机器人标记里的 32 位 OpenID。
+
+**群讯息日报。** 系统于北京时间 23:55 预分析，当天最后五分钟的消息会一起纳入零点日报。星图只发一张，突出前三名和前 12 名的精确发言数，其他发言者合计列出。六个四小时段显示主要话题。头像优先使用 QQ 提供的地址，Redis 启用时复用最近成功的头像，其他情况显示昵称首字。零点生成后清理原始记录和临时图片，有效话题以群级向量摘要保存。发送失败的图片保留重试，零点后五分钟内可以补做漏掉的绘制。
+
+**群友情报。** `/群友情报 @群友` 属于娱乐功能组并全天开放。提交后先回复排队确认，再发一张观察图。当天全部缓存用于查找目标发言、提及和相关上下文，同时加入该成员的持久记忆。图片展示核心标签、发言习惯、常聊话题、可核实的重复用语、带发言依据的长处与沟通摩擦、MBTI 趣味推测和情报总结。模型不可用时图上只展示本地统计。命令接受 QQ 的正式 @ 标记。
+
+普通成员按群与成员计费，默认滚动一分钟 1 次、五小时 15 次、七天 80 次。额度不足会在排队前回覆各窗口的剩余比例与北京时间。Bot 主人及管理员默认不限额，可用 `/群友情报 重置` 清空本群的次数记录。使用 `settings.yml` 的 `plugins.member_intel` 调整开关、排队提示、限额、豁免角色和画像快取时间。群聊模型的术语偏好由 `group-ai.yml` 中的 `output_language` 指定。
+
+**群聊情报存储拓扑。** 在 `settings.yml` 的 `group_ai_storage` 独立选择五项，默认整套群聊情报可离线使用 SQLite 与进程内快取。
+
+| 选项 | 可选后端 | 数据 |
+| --- | --- | --- |
+| `history` | `sqlite` / `mysql` / `mongodb` | 原始讯息、成员资料、附件。MySQL 将附件内容保存在数据库，SQLite 和 MongoDB 模式将暂存附件保存在本机。 |
+| `memory` | `sqlite` / `mysql` | 长期保留的群摘要和成员向量记忆。 |
+| `reports` | `sqlite` / `mysql` | 日报日历、待投递图像、已归档日期。 |
+| `quota` | `sqlite` / `mysql` | 需要原子更新的滚动配额和管理员重置。 |
+| `cache` | `local` / `mysql` / `redis` | 可重建的头像、日报分析和画像结果。Redis 提供共享 TTL，MySQL 提供单库部署的 TTL 快取，`local` 不需要额外服务。 |
+
+纯 MySQL 示例，适用 MySQL 8.0.19 及以上版本。
+
+```yaml
+group_ai_storage:
+  history: mysql
+  memory: mysql
+  reports: mysql
+  quota: mysql
+  cache: mysql
+  credentials_file: .private-group-ai.yml
+```
+
+混合模式可仅把上述 `history` 改为 `mongodb`、`cache` 改为 `redis`，其余继续使用 MySQL。凭据 YAML 可分别提供 `mysql`（主机、库、账号等）、`mongodb`（URI、库、集合前缀）、`redis`（URL、键前缀）。如果已经配置了这些连接，也可以用 `credentials_from: daily_waifu`。限额始终先核验，读取快取不会跳过配额。
+
+在选定的 MySQL 数据库中，先用管理账号执行启用角色所需的建表脚本。`deploy/group_ai_full_mysql.sql` 包含历史、成员资料、附件、日报和 TTL 快取表；`deploy/group_ai_memory.sql` 创建向量记忆表；`deploy/group_command_quota.sql` 创建限额表。给运行账号授予所用表的 SELECT、INSERT、UPDATE 和必要的 DELETE 即可。Redis 账号需要对所选键前缀执行 GET 和 SETEX。
+
+从 SQLite 切换时先备份配置和数据库，停机器人后以目标配置运行 `python -m mcqq.migrate_group_storage`，查看逐项回读结果后再启动。可用 `--only history|memory|reports|quota` 分阶段切换。快取会自动重建，迁移不清除 SQLite 源记录。既有 SQLite 图片缓存仅导入仍可读取的文件。
+
+**编写插件。** 在 `mcqq/plugins` 配对提交 Python 处理器和同名 `.yml` 清单，并在注册表显式注册。YAML 的 `command` 声明 `name`、`category`、`schedule` 与参数类型 `mention` 或 `text`，`skill` 保存分析提示。异步处理器接收群上下文和该 YAML 配置，成功时可返回 PNG 字节。示例见 `member_intel.py` 与 `member_intel.yml`。
+
+自动日报默认只发给别名为「一群」的唯一授权群。可用 `daily_report_groups` 显式指定授权群的 `group_openid`，空数组关闭排程。所有授权群的 Bot 主人或管理员均可发送 `/群讯息情报统计`，图上会注明「手动触发」和从当日 00:00 到命令触发时刻的区间。统计所覆盖的消息取决于该群启用的 QQ 全量群消息权限。图像通过 QQ Markdown 图片素材接口发送，零点投递还需要当前机器人在群中拥有主动发送权限。Ubuntu 需安装中文字体（例如 `fonts-noto-cjk`），也可配置 `daily_report_font`。
+
+`/今日老婆` 使用 MySQL 保存每日结果与一次换取状态，MongoDB 保存可筛选角色目录。未更换或确认时，抽取和重复查询均附「换老婆」和「就这个了」按钮；点击换老婆会发送 `/换老婆`，每天最多换一次，确认后不能再换，重复点击只取回同一位。按钮不可用时可输入 `/换老婆`。`/今日老婆 许愿 角色名` 消耗 16 积分并使用当天的更换机会，可以在首次抽取前使用。主人可用 `/今日老婆 重置` 清除当天所有人的抽取与换取次数；旧按钮随抽取代号失效。既有资料库需执行 `deploy/daily_waifu_swap_20261117.sql` 升级资料表。Redis 仅存短期回覆快取，过期自动清除；每日结果始终读 MySQL，确保重置或换取后不返回旧资料。资料库专用帐号应由部署者建立，凭据保存在不纳入 Git 的 `.private-daily-waifu.json`。原有绑定、队列和权限仍在 SQLite，避免迁移线上资料。
 
 角色目录来自 Bangumi 的动画角色与作品资料，使用 `deploy/build_waifu_catalog.py` 重新生成；卡片使用单条 QQ Markdown 消息承载头像、角色、作品及按钮，需要机器人具备相应 Markdown 权限。MongoDB 目录中的新角色须与内置目录对应；MongoDB 不可用时使用内置目录。旧版 AniList 抽取记录与新目录不兼容，切换前应备份并清理今日老婆记录。
 

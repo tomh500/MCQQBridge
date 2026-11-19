@@ -24,13 +24,45 @@ bot_roles:
   admins: []
 daily_waifu:
   enabled: false
-  credentials_file: .private-daily-waifu.json
+  credentials_file: .private-daily-waifu.yml
 # 按 group_openid 设置；示例见 README。开放时段采用北京时间。
 feature_policy:
   groups: {}
   holiday_ranges: {}
 group_ai_config: group-ai.yml
 group_ai_word_filter: ''
+# 群全量事件中 @ 本机器人使用的 OpenID。
+group_ai_mention_openid: ''
+# 可独立选择各数据职责的后端。未配置外部连接时可使用本地默认值。
+group_ai_storage:
+  history: sqlite  # sqlite / mysql / mongodb（原始讯息、附件和成员资料）
+  memory: sqlite   # sqlite / mysql
+  reports: sqlite  # sqlite / mysql（日报出站、重试及日历状态）
+  cache: local     # local / mysql / redis
+  quota: sqlite    # sqlite / mysql
+  # 纯 MySQL 时把以上五项都设为 mysql，再填写 mysql 连接段。
+  # credentials_file: .private-group-ai.yml  # mongodb、mysql、redis 连接段
+  # credentials_from: daily_waifu            # 可选，复用已有连接
+  # mongodb: {uri: 'mongodb://localhost:27017', database: mcqq, collection_prefix: mcqq_group}
+  # mysql: {host: localhost, port: 3306, user: mcqq, password: '', database: mcqq}
+  # redis: {url: 'redis://localhost:6379/0', key_prefix: 'mcqq:group-ai'}
+# plugins:
+#   member_intel:
+#     enabled: true
+#     command:
+#       queue_notice: '群友情报任务已提交到队列，完成后会发送图片。' # 空字串可停用提示
+#       quota:
+#         enabled: true
+#         unlimited_roles: [owner, admin]
+#         limits:
+#           - {label: 一分钟, seconds: 60, max_requests: 1}
+#           - {label: 五小时, seconds: 18000, max_requests: 15}
+#           - {label: 周, seconds: 604800, max_requests: 80}
+#     skill:
+#       cache_ttl_seconds: 180 # 0 停用 Redis 画像快取
+# 省略时仅对别名为「一群」的唯一授权群自动发送。[] 关闭自动日报。
+# daily_report_groups: [GROUP_OPENID_A]
+# daily_report_font: /usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc
 media:
   port: 0
   public_base_url: ''

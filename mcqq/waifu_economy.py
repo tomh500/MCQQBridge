@@ -165,12 +165,10 @@ class WaifuEconomy:
                         return previous
                     q.execute('SELECT swapped FROM daily_waifu_draws WHERE subject=%s AND day=%s FOR UPDATE', (subject, day))
                     row = q.fetchone()
-                    if not row:
-                        result = {'error': '请先发送 /今日老婆。'}
-                    elif row[0]:
+                    if row and row[0]:
                         result = {'error': '今天的更换机会已使用。'}
                     elif balance < 16:
-                        result = {'error': '暂时无法许愿，请稍后再试。'}
+                        result = {'error': f'积分不足，许愿需要 16 积分，目前有 {balance} 积分。'}
                     else:
                         q.execute('INSERT IGNORE INTO waifu_wishes(subject,source_url,failures) VALUES (%s,%s,0)', (subject, target['source_url']))
                         q.execute('SELECT failures FROM waifu_wishes WHERE subject=%s AND source_url=%s FOR UPDATE', (subject, target['source_url']))
@@ -181,7 +179,10 @@ class WaifuEconomy:
                         q.execute('UPDATE waifu_wishes SET failures=%s WHERE subject=%s AND source_url=%s', (0 if won else min(50, failures + 1), subject, target['source_url']))
                         q.execute('UPDATE waifu_accounts SET points=points-16 WHERE subject=%s', (subject,))
                         token = secrets.token_hex(16)
-                        q.execute('UPDATE daily_waifu_draws SET name=%s,image_url=%s,source_url=%s,draw_token=%s,swapped=1 WHERE subject=%s AND day=%s', (entry['name'], entry['image_url'], entry['source_url'], token, subject, day))
+                        if row:
+                            q.execute('UPDATE daily_waifu_draws SET name=%s,image_url=%s,source_url=%s,draw_token=%s,swapped=1 WHERE subject=%s AND day=%s', (entry['name'], entry['image_url'], entry['source_url'], token, subject, day))
+                        else:
+                            q.execute('INSERT INTO daily_waifu_draws(subject,day,name,image_url,source_url,draw_token,swapped) VALUES (%s,%s,%s,%s,%s,%s,1)', (subject, day, entry['name'], entry['image_url'], entry['source_url'], token))
                         result = self.storage.result((entry['name'], entry['image_url'], entry['source_url'], 1, token), new=False)
                     self._save(q, event, subject, 'wish', result)
                 c.commit()

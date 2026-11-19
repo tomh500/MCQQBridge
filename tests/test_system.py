@@ -267,6 +267,8 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
         from sync_commands import panel_config, display_width
         panel = panel_config()
         self.assertEqual(len(panel["items"]), 20)
+        self.assertIn("群讯息情报统计", [item["name"] for item in panel["items"]])
+        self.assertIn("群友情报", [item["name"] for item in panel["items"]])
         self.assertIn("跨群信息", [item["name"] for item in panel["items"]])
         self.assertIn("发命令", [item["name"] for item in panel["items"]])
         self.assertIn("大发命令", [item["name"] for item in panel["items"]])

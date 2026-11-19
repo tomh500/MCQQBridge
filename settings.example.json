@@ -21,6 +21,8 @@
     "media.port": "可选图片回退服务监听端口；0关闭独立媒体监听器。/ Optional image fallback listener port; 0 disables the extra listener.",
     "media.public_base_url": "游戏玩家可访问的图片URL前缀，例：https://images.example.com/mcqq-media；不应填内部API地址。/ Public image base URL reachable by players; not the internal API URL.",
     "features.private_ai": "是否启用私聊AI适配器，默认false；需要额外配置afterglow_connection。/ Enable optional private AI adapter; false by default.",
+    "daily_report_groups": "自动群讯息日报授权群列表。省略时使用唯一别名为一群的授权群；空数组关闭。填写 group_openid。",
+    "daily_report_font": "星图字体路径；留空自动使用系统中文字体。",
     "launcher_groups": "引导器验证群映射：group_openid -> 数字群号。例：{\"GROUP_OPENID_A\":\"123456789\"}；{}不配置任何新映射。/ Launcher verification mapping: group_openid -> numeric group number.",
     "_comments": "本对象仅为双语说明，不参与业务逻辑。JSON不能写#或//注释；修改右侧真实配置字段。/ Documentation only; JSON does not allow # or // comments. Edit actual settings fields outside this object."
   },
@@ -58,6 +60,7 @@
   },
   "group_ai_config": "group-ai.yml",
   "group_ai_word_filter": "",
+  "daily_report_font": "",
   "media": {
     "port": 0,
     "public_base_url": ""
