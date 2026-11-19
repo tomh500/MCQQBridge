@@ -268,7 +268,7 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
         panel = panel_config()
         self.assertLessEqual(len(panel["items"]), 20)
         self.assertEqual([item["name"] for item in panel["items"]],
-                         ["头衔", "群情报", "账号", "帮助", "跨群信息", "发命令", "服状态", "老婆"])
+                         ["SMP头衔", "群情报", "SMP账号", "帮助", "跨群信息", "发命令", "服状态", "今日老婆"])
         self.assertEqual(display_width("本群ID"), 6)
         for item in panel["items"]:
             self.assertLessEqual(display_width(item["name"]), 14)
@@ -277,13 +277,13 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
     def test_explicit_commands_and_action_specific_hints(self):
         from mcqq.commands import expand_command_group
 
-        self.assertEqual(parse("/账号 换绑 基岩 Xbox Name"), ("rebind", "bedrock", "Xbox Name"))
-        self.assertEqual(parse("/账号 解绑 确认"), ("unbind", None, "确认"))
-        self.assertEqual(parse("/头衔 清除"), ("title_clear", None, ""))
+        self.assertEqual(parse("/SMP账号 换绑 基岩 Xbox Name"), ("rebind", "bedrock", "Xbox Name"))
+        self.assertEqual(parse("/SMP账号 解绑 确认"), ("unbind", None, "确认"))
+        self.assertEqual(parse("/SMP头衔 清除"), ("title_clear", None, ""))
         self.assertEqual(parse("/服状态 系统"), ("system_info", None, None))
         self.assertEqual(expand_command_group("/群情报 成员 <@!target>"), "/群友情报 <@!target>")
-        self.assertEqual(expand_command_group("/老婆 更换"), "/换老婆")
-        for command in ("/头衔", "/群情报", "/账号", "/服状态", "/老婆"):
+        self.assertEqual(expand_command_group("/换老婆"), "/换老婆")
+        for command in ("/SMP头衔", "/群情报", "/SMP账号", "/服状态"):
             with self.subTest(command=command), self.assertRaisesRegex(ValueError, command):
                 expand_command_group(command)
         self.assertEqual(parse("/发命令 survival /say  hi !"), ("game_command", "survival", "/say  hi !"))

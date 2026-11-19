@@ -27,7 +27,7 @@ def group_panel(cfg, group, now=None):
         following = verdict.get('next')
         description = '下次 ' + following.strftime('%m-%d %H:%M') if following else '暂不可用'
     for item in panel['items']:
-        if item['name'] == '老婆':
+        if item['name'] == '今日老婆':
             item['desc'] = description
     return panel
 
