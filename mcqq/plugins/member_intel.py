@@ -147,6 +147,9 @@ async def handle(ai, settings, group, target, received, config):
 
 
 async def cached_analysis(ai, group, target, received, ordered, target_texts, memories, group_context, skill):
+    policy = await asyncio.to_thread(ai.feature_policy.check, group, "llm", consume=False)
+    if not policy["allowed"]:
+        return {}
     ttl = skill.get("cache_ttl_seconds", 0)
     shared_cache = ttl and getattr(ai.history, "shared_cache", False)
     if ttl:

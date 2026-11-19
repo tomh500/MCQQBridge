@@ -661,6 +661,15 @@ class QQBot(botpy.Client):
         member = str(getattr(interaction, "group_member_openid", "") or "")
         data = getattr(getattr(interaction, "data", None), "resolved", None)
         button = str(getattr(data, "button_data", "") or "")
+        waifu_action = button.startswith(("waifu_accept:", "waifu_swap:"))
+        if waifu_action:
+            match = re.fullmatch(r"waifu_(?:accept|swap):(\d{4}-\d{2}-\d{2}):([a-f0-9]{32}):([a-f0-9]{24})", button)
+            signed = button.replace("waifu_accept:", "waifu_swap:", 1)
+            today = datetime.now(ZoneInfo("Asia/Shanghai")).date().isoformat()
+            if (not group or not member or not match or match.group(1) != today
+                    or not hmac.compare_digest(signed, self.waifu_button_data(group, member, today, match.group(2)))):
+                await self.api.on_interaction_result(interaction.id, 4)
+                return
         category = self.feature_rules().category_for(button, button=True)
         if category:
             verdict = await self.feature_check(group, category, consume=not button.startswith('waifu_accept:'))
@@ -671,11 +680,6 @@ class QQBot(botpy.Client):
                         content=self.feature_closed_text(verdict), event_id=interaction.id)
                 return
         if button.startswith("waifu_accept:"):
-            match = re.fullmatch(r"waifu_accept:(\d{4}-\d{2}-\d{2}):([a-f0-9]{32}):([a-f0-9]{24})", button)
-            signed = button.replace("waifu_accept:", "waifu_swap:", 1)
-            if not group or not member or not match or match.group(1) != datetime.now(ZoneInfo("Asia/Shanghai")).date().isoformat() or not hmac.compare_digest(signed, self.waifu_button_data(group, member, match.group(1), match.group(2))):
-                await self.api.on_interaction_result(interaction.id, 4)
-                return
             try:
                 result = await self.call_service("/v1/waifu/accept", {"app_id": self.settings["app_id"], "group_openid": group, "member_openid": member, "draw_token": match.group(2), "event_id": interaction.id})
                 await self.api.on_interaction_result(interaction.id, 1 if "error" in result else 0)
@@ -684,11 +688,6 @@ class QQBot(botpy.Client):
                 await self.api.on_interaction_result(interaction.id, 1)
             return
         if button.startswith("waifu_swap:"):
-            match = re.fullmatch(r"waifu_swap:(\d{4}-\d{2}-\d{2}):([a-f0-9]{32}):([a-f0-9]{24})", button)
-            if not group or not member or not match or match.group(1) != datetime.now(ZoneInfo("Asia/Shanghai")).date().isoformat() or not hmac.compare_digest(
-                button, self.waifu_button_data(group, member, match.group(1), match.group(2))):
-                await self.api.on_interaction_result(interaction.id, 4)
-                return
             acknowledged = False
             try:
                 result = await self.call_service("/v1/waifu/swap", {

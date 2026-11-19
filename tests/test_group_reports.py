@@ -224,14 +224,21 @@ class DailyReportTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.ai.complete.await_count, 1)
         self.assertEqual(bot.send_group_report_image.await_count, 2)
 
+        message.id = "portrait-llm-closed"
+        with patch.object(self.ai.feature_policy, "check", return_value={"allowed": False}), \
+                patch("mcqq.plugins.member_intel.render_portrait", wraps=render_portrait) as closed_render:
+            await bot.on_group_message_create(message)
+        self.assertTrue(closed_render.call_args.kwargs["stats_only"])
+        self.assertEqual(self.ai.complete.await_count, 1)
+
         settings["plugins"] = {"member_intel": {"skill": {"cache_ttl_seconds": 0}}}
         self.ai.complete = AsyncMock(side_effect=TimeoutError)
         message.id = "portrait-fallback"
         with patch("mcqq.plugins.member_intel.render_portrait", wraps=render_portrait) as render:
             await bot.on_group_message_create(message)
         self.assertTrue(render.call_args.kwargs["stats_only"])
-        self.assertEqual(bot.send_group_report_image.await_count, 3)
-        self.assertEqual(bot.reply_group_text.await_count, 3)
+        self.assertEqual(bot.send_group_report_image.await_count, 4)
+        self.assertEqual(bot.reply_group_text.await_count, 4)
         self.assertTrue(all("已提交到队列" in call.args[1] for call in bot.reply_group_text.await_args_list))
 
     async def test_group_member_quota_rejects_before_model_or_image_and_admin_resets(self):

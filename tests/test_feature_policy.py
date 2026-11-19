@@ -137,8 +137,24 @@ class BotPolicyTests(unittest.IsolatedAsyncioTestCase):
         bot._feature_policy = FeaturePolicy(bot.settings, clock=lambda: at(6,4,14))
         bot.api = SimpleNamespace(on_interaction_result=AsyncMock(),post_group_message=AsyncMock())
         bot.call_service = AsyncMock()
-        event = SimpleNamespace(id='evt',group_openid='one',group_member_openid='member', data=SimpleNamespace(resolved=SimpleNamespace(button_data='waifu_swap:any')))
+        today = datetime.now(TZ).date().isoformat()
+        button = bot.waifu_button_data('one', 'member', today, 'a' * 32)
+        event = SimpleNamespace(id='evt',group_openid='one',group_member_openid='member', data=SimpleNamespace(resolved=SimpleNamespace(button_data=button)))
         await bot.on_interaction_create(event)
         bot.call_service.assert_not_awaited()
         bot.api.on_interaction_result.assert_awaited_once()
         bot.api.post_group_message.assert_awaited_once()
+
+    async def test_other_members_button_does_not_check_or_consume_policy(self):
+        bot = QQBot.__new__(QQBot)
+        bot.settings = {'bot_token': 'x' * 40}
+        bot.feature_check = AsyncMock()
+        bot.call_service = AsyncMock()
+        bot.api = SimpleNamespace(on_interaction_result=AsyncMock())
+        button = bot.waifu_button_data('one', 'owner', datetime.now(TZ).date().isoformat(), 'a' * 32)
+        event = SimpleNamespace(id='evt', group_openid='one', group_member_openid='other',
+                                data=SimpleNamespace(resolved=SimpleNamespace(button_data=button)))
+        await bot.on_interaction_create(event)
+        bot.api.on_interaction_result.assert_awaited_once_with('evt', 4)
+        bot.feature_check.assert_not_awaited()
+        bot.call_service.assert_not_awaited()
