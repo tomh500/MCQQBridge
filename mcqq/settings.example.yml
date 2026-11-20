@@ -62,6 +62,7 @@ group_ai_storage:
 #       cache_ttl_seconds: 180 # 0 停用 Redis 画像快取
 # 省略时仅对别名为「一群」的唯一授权群自动发送。[] 关闭自动日报。
 # daily_report_groups: [GROUP_OPENID_A]
+# daily_report_time: "23:50"
 # daily_report_font: /usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc
 media:
   port: 0

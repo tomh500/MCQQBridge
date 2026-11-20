@@ -113,6 +113,30 @@ class DailyReportTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(self.ai.history.day("one", self.end.timestamp(), self.end.timestamp()+1)), 1)
         self.assertEqual(len(self.ai.history.day("two", self.start.timestamp(), self.end.timestamp())), 1)
 
+    async def test_evening_cutoff_counts_boundary_message_in_next_report(self):
+        notify = AsyncMock()
+        reports = DailyReports(
+            self.ai, {**self.settings, "daily_report_time": "23:50"}, self.send, notify=notify,
+        )
+        end = self.start + timedelta(days=1, hours=23, minutes=50)
+        start = end - timedelta(days=1)
+        self.assertEqual(reports.period_end(end - timedelta(seconds=1)), start)
+        self.assertEqual(reports.period_end(end), end)
+        self.add("before", "one", "alice", "Before", end - self.start - timedelta(seconds=1), "Alice")
+        self.add("at", "one", "bob", "At cutoff", end - self.start, "Bob")
+        self.ai.config["enabled"] = False
+        with patch("mcqq.group_reports.render", return_value=[b"report"]) as draw:
+            await reports.scheduled("one", start, end)
+            await reports.scheduled("one", start, end)
+        self.send.assert_awaited_once_with("one", b"report")
+        notify.assert_awaited_once_with("one", "今日群聊总结已完成，本次触发为自动触发", translate=False)
+        self.assertEqual(draw.call_args.args[5], [("Alice", 1, None)])
+        self.assertEqual(draw.call_args.args[6][0][0], "23:50 – 03:50")
+        self.assertEqual(draw.call_args.args[6][-1][0], "19:50 – 23:50")
+        self.assertTrue(self.ai.history.closed_day("one", end.date().isoformat()))
+        next_rows = self.ai.history.day("one", end.timestamp(), (end + timedelta(days=1)).timestamp())
+        self.assertEqual([row[1] for row in next_rows], ["bob"])
+
     async def test_manual_downgrade_and_cutoff_render_png(self):
         self.ai.complete = AsyncMock(side_effect=ValueError("bad provider response"))
         self.add("long", "two", "eve", "讨论" * 2000, timedelta(hours=3), "群友小夏")

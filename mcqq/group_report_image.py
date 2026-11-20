@@ -45,10 +45,15 @@ def png(image):
 
 class Canvas:
     def __init__(self, height, font):
-        self.image = Image.new("RGB", (WIDTH, height))
-        self.draw = ImageDraw.Draw(self.image)
         path = font_path(font)
         self.fonts = {size: ImageFont.truetype(path, size) for size in (20, 23, 25, 28, 32, 36, 44, 54, 64, 82)}
+
+        if height is not None:
+            self.background(height)
+
+    def background(self, height):
+        self.image = Image.new("RGB", (WIDTH, height))
+        self.draw = ImageDraw.Draw(self.image)
         for y in range(height):
             glow = (1 - y / height) ** 2
             self.draw.line((0, y, WIDTH, y), fill=(7 + int(12 * glow), 13 + int(14 * glow), 25 + int(33 * glow)))
@@ -63,15 +68,15 @@ class Canvas:
     def text(self, x, y, text, size, color=INK, anchor="la"):
         self.draw.text((x, y), text, font=self.fonts[size], fill=color, anchor=anchor)
 
-    def wrap(self, text, size, width, limit):
+    def wrap(self, text, size, width, limit=None):
         font = self.fonts[size]
         clean = " ".join(str(text).split())
         lines, line = [], ""
         for char in clean:
-            if line and font.getlength(line + char) > width:
+            if line and (font.getbbox(line + char)[2] if limit is None else font.getlength(line + char)) > width:
                 lines.append(line)
                 line = ""
-            if len(lines) >= limit:
+            if limit is not None and len(lines) >= limit:
                 while lines[-1] and font.getlength(lines[-1] + "…") > width:
                     lines[-1] = lines[-1][:-1]
                 lines[-1] += "…"
@@ -93,77 +98,123 @@ class Canvas:
 
 
 def render(start, end, manual, group, hours, rankings, blocks, font=None):
-    timeline = blocks[:6]
-    height = 950 + 158 * ((len(timeline) + 1) // 2)
-    chart = Canvas(height, font)
+    chart = Canvas(None, font)
+    group_label = (" ".join(str(group).split()) or "本群") + (" · 手动统计" if manual else " · 每日统计")
+    group_lines = chart.wrap(group_label, 25, 600)
+    header_extra = 32 * (len(group_lines) - 1)
+
+    top = rankings[:3]
+    top_names = [chart.wrap(name, 28, 223) or ["?"] for name, _, _ in top]
+    top_extra = 36 * max((len(lines) - 1 for lines in top_names), default=0)
+    compact = []
+    for name, count, avatar in rankings[3:RANK_LIMIT]:
+        width = 234 - chart.fonts[32].getbbox(f"{count:,}")[2]
+        compact.append((name, count, avatar, chart.wrap(name, 25, width) or ["?"]))
+    compact_rows = [compact[i:i+3] for i in range(0, len(compact), 3)]
+    compact_heights = [54 + 32 * (max(len(entry[3]) for entry in row) - 1) for row in compact_rows]
+
+    timeline = []
+    for window, topics, unavailable in blocks[:6]:
+        wrapped = []
+        for title, detail, users in topics:
+            speakers = " · " + "、".join(users[:2]) if users else ""
+            wrapped.append((chart.wrap(title, 25, 548), chart.wrap(detail + speakers, 23, 548)))
+        height = 98 if not wrapped else 52 + sum(
+            33 * len(title) + 31 * len(detail) + 12 for title, detail in wrapped
+        )
+        timeline.append((window, wrapped, unavailable, height))
+    timeline_rows = [timeline[i:i+2] for i in range(0, len(timeline), 2)]
+    timeline_heights = [max(card[3] for card in row) for row in timeline_rows]
+
+    compact_y = 670 + header_extra + top_extra
+    extra = rankings[RANK_LIMIT:]
+    after_rankings = compact_y + sum(height + 11 for height in compact_heights)
+    timeline_y = after_rankings + (34 if extra else 0)
+    height = timeline_y + (50 + sum(height + 12 for height in timeline_heights) if timeline else 0) + 22
+    chart.background(height)
     draw = chart.draw
     chart.text(50, 28, "群讯息情报", 64)
-    name = (chart.wrap(group, 25, 395, 1) or ["本群"])[0]
-    chart.text(55, 110, name + (" · 手动统计" if manual else " · 每日统计"), 25, GOLD)
+    for index, line in enumerate(group_lines):
+        chart.text(55, 110 + index * 32, line, 25, GOLD)
     chart.text(1228, 49, f"{sum(hours):,} 条讯息  /  {len(rankings):,} 位发言者", 36, INK, "ra")
     chart.text(1228, 108, f"{start:%m-%d %H:%M} 至 {end:%m-%d %H:%M} · 北京时间", 23, SOFT, "ra")
 
-    chart.panel((48, 166, 1232, 331))
-    chart.text(72, 183, "全天发言星轨", 28)
+    shift = header_extra
+    chart.panel((48, 166+shift, 1232, 331+shift))
+    chart.text(72, 183+shift, "全天发言星轨", 28)
     peak = max(hours, default=0)
     if peak:
-        chart.text(1208, 187, f"峰值 {hours.index(peak):02d}:00 · {peak:,} 条", 23, GOLD, "ra")
+        chart.text(1208, 187+shift, f"峰值 {hours.index(peak):02d}:00 · {peak:,} 条", 23, GOLD, "ra")
     for hour, count in enumerate(hours):
         x = 77 + hour * 47
         rise = round(64 * count / peak) if peak else 0
-        draw.rounded_rectangle((x, 288-max(4, rise), x+27, 288), 4,
+        draw.rounded_rectangle((x, 288+shift-max(4, rise), x+27, 288+shift), 4,
                                fill=GOLD if count and count == peak else "#588dd1" if count else "#30476c")
         if hour % 3 == 0 or hour == 23:
-            chart.text(x+13, 310, f"{hour:02}", 20, MUTED, "mm")
+            chart.text(x+13, 310+shift, f"{hour:02}", 20, MUTED, "mm")
 
-    chart.text(49, 354, "群友发言排行", 36)
-    chart.text(1230, 367, "按发言条数排列", 23, SOFT, "ra")
-    top = rankings[:3]
+    chart.text(49, 354+shift, "群友发言排行", 36)
+    chart.text(1230, 367+shift, "按发言条数排列", 23, SOFT, "ra")
     top_count = rankings[0][1] if rankings else 1
     for rank, x, y, color in ((2, 48, 468, SILVER), (1, 446, 421, GOLD), (3, 844, 468, BRONZE)):
         if rank > len(top):
             continue
         name, count, avatar = top[rank-1]
-        chart.panel((x, y, x+388, 649), outline=color)
+        y += shift
+        bottom = 649 + shift + top_extra
+        chart.panel((x, y, x+388, bottom), outline=color)
         draw.ellipse((x+16, y+24, x+126, y+134), outline=BORDER, width=2)
         chart.portrait(x+35, y+43, 72, name, avatar, color)
         chart.text(x+140, y+13, f"#{rank:02}", 23, color)
-        chart.text(x+140, y+47, chart.wrap(name, 28, 223, 1)[0], 28)
-        chart.text(x+140, y+80, f"{count:,}", 54, color)
-        chart.text(x+356, y+118, "条", 20, SOFT, "ra")
-        draw.rounded_rectangle((x+26, 620, x+362, 628), 4, fill=BORDER)
-        draw.rounded_rectangle((x+26, 620, x+26+max(6, round(336*count/top_count)), 628), 4, fill=color)
+        for index, line in enumerate(top_names[rank-1]):
+            chart.text(x+140, y+47+index*36, line, 28)
+        chart.text(x+140, y+80+top_extra, f"{count:,}", 54, color)
+        chart.text(x+356, y+118+top_extra, "条", 20, SOFT, "ra")
+        draw.rounded_rectangle((x+26, bottom-29, x+362, bottom-21), 4, fill=BORDER)
+        draw.rounded_rectangle((x+26, bottom-29, x+26+max(6, round(336*count/top_count)), bottom-21), 4, fill=color)
     if not rankings:
-        chart.panel((48, 419, 1232, 649))
-        chart.text(640, 533, "本时段暂无发言", 36, SOFT, "mm")
+        chart.panel((48, 419+shift, 1232, 649+shift))
+        chart.text(640, 533+shift, "本时段暂无发言", 36, SOFT, "mm")
 
-    for rank, (name, count, avatar) in enumerate(rankings[3:RANK_LIMIT], 4):
-        index = rank - 4
-        x, y = 48+(index % 3)*398, 670+(index//3)*65
-        chart.panel((x, y, x+388, y+54))
-        chart.text(x+15, y+14, f"{rank:02}", 23, SOFT)
-        chart.portrait(x+62, y+10, 34, name, avatar)
-        chart.text(x+112, y+13, chart.wrap(name, 25, 171, 1)[0], 25)
-        chart.text(x+366, y+9, f"{count:,}", 32, INK, "ra")
-    extra = rankings[RANK_LIMIT:]
+    rank = 4
+    y = compact_y
+    for row, height in zip(compact_rows, compact_heights):
+        for column, (name, count, avatar, lines) in enumerate(row):
+            x = 48 + column * 398
+            chart.panel((x, y, x+388, y+height))
+            chart.text(x+15, y+14, f"{rank:02}", 23, SOFT)
+            chart.portrait(x+62, y+10, 34, name, avatar)
+            for index, line in enumerate(lines):
+                chart.text(x+112, y+13+index*32, line, 25)
+            chart.text(x+366, y+9, f"{count:,}", 32, INK, "ra")
+            rank += 1
+        y += height + 11
     if extra:
-        chart.text(1230, 872, f"其余 {len(extra):,} 位 · 合计 {sum(row[1] for row in extra):,} 条", 23, SOFT, "ra")
+        chart.text(1230, y+5, f"其余 {len(extra):,} 位 · 合计 {sum(row[1] for row in extra):,} 条", 23, SOFT, "ra")
 
-    if timeline:
-        chart.text(50, 896, "话题时间线", 32)
-    for index, (window, topics, unavailable) in enumerate(timeline):
-        x, y = 48+(index % 2)*598, 946+(index//2)*152
-        chart.panel((x, y, x+586, y+140))
-        chart.text(x+18, y+11, window, 23, GOLD)
-        for line, (title, detail, users) in enumerate(topics[:2]):
-            speakers = " · " + "、".join(users[:2]) if users else ""
-            content = chart.wrap(title + "  " + detail + speakers, 23, 548, 1)
-            chart.text(x+18, y+53+line*33, content[0], 23, INK)
-        if not topics:
-            text = "LLM 话题暂不可用" if unavailable else "没有可提炼的话题"
-            chart.text(x+18, y+56, text, 23, MUTED)
-        elif unavailable:
-            chart.text(x+569, y+13, "部分话题未生成", 20, MUTED, "ra")
+    if timeline_rows:
+        chart.text(50, timeline_y, "话题时间线", 32)
+    y = timeline_y + 50
+    for row, height in zip(timeline_rows, timeline_heights):
+        for column, (window, topics, unavailable, _) in enumerate(row):
+            x = 48 + column * 598
+            chart.panel((x, y, x+586, y+height))
+            chart.text(x+18, y+11, window, 23, GOLD)
+            if not topics:
+                status = "LLM 话题暂不可用" if unavailable else "没有可提炼的话题"
+                chart.text(x+18, y+52, status, 23, MUTED)
+            elif unavailable:
+                chart.text(x+569, y+13, "部分话题未生成", 20, MUTED, "ra")
+            cursor = y + 45
+            for title, detail in topics:
+                for line in title:
+                    chart.text(x+18, cursor, line, 25)
+                    cursor += 33
+                for line in detail:
+                    chart.text(x+18, cursor, line, 23, SOFT)
+                    cursor += 31
+                cursor += 12
+        y += height + 12
     return [png(chart.image)]
 
 

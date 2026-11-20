@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from pathlib import Path
 import yaml
 
@@ -60,4 +61,6 @@ def load():
     reports = cfg.get("daily_report_groups", [])
     if not isinstance(reports, list) or any(g not in cfg.get("allowed_groups", []) for g in reports):
         raise ValueError("daily_report_groups must be a subset of allowed_groups")
+    if not re.fullmatch(r"(?:[01][0-9]|2[0-3]):[0-5][0-9]", str(cfg.get("daily_report_time", "00:00"))):
+        raise ValueError('daily_report_time must be a quoted Beijing time in HH:MM format')
     return cfg

@@ -72,10 +72,11 @@ async def fetch_avatars(urls, history=None):
 
 
 class DailyReports:
-    def __init__(self, ai, settings, send):
+    def __init__(self, ai, settings, send, *, notify=None):
         self.ai = ai
         self.history = ai.history
         self.send = send
+        self.notify = notify
         allowed = settings.get("allowed_groups", [])
         self.aliases = settings.get("chat_bridge", {}).get("group_aliases", {})
         if "daily_report_groups" in settings:
@@ -84,9 +85,15 @@ class DailyReports:
             first = [group for group in allowed if self.aliases.get(group) == "一群"]
             configured = first if len(first) == 1 else []
         self.groups = tuple(dict.fromkeys(group for group in configured if group in allowed))
+        hour, minute = map(int, settings.get("daily_report_time", "00:00").split(":"))
+        self.cutoff = timedelta(hours=hour, minutes=minute)
         self.font = settings.get("daily_report_font")
         self.cache = {}
         self.slots = asyncio.Semaphore(6)
+
+    def period_end(self, moment):
+        cutoff = midnight(moment) + self.cutoff
+        return cutoff if moment >= cutoff else cutoff - timedelta(days=1)
 
     async def ask(self, lines, members):
         prompt = (
@@ -175,13 +182,13 @@ class DailyReports:
             if duplicates[name] > 1:
                 names[member] = f"{name} · {labels[member]}"
         display = {labels[member]: name for member, name in names.items()}
-        split = start + timedelta(hours=23, minutes=55)
+        split = start + timedelta(days=1) - CATCHUP
         hours = [0] * 24
         windows = [[] for _ in range(7)]
         for created, member, _, text, _ in rows:
             stamp = datetime.fromtimestamp(created, BEIJING)
             hours[stamp.hour] += 1
-            part = 6 if stamp >= split else stamp.hour // 4
+            part = 6 if stamp >= split else (stamp - start) // timedelta(hours=4)
             windows[part].append((stamp, labels[member], text))
 
         available = (self.ai.configured() and time.monotonic() >= self.ai.unavailable_until
@@ -219,7 +226,7 @@ class DailyReports:
             if begins >= end and part:
                 break
             finishes = min(end, begins + timedelta(hours=4))
-            label = begins.strftime("%H:%M") + " – " + ("24:00" if finishes.date() != start.date() else finishes.strftime("%H:%M"))
+            label = begins.strftime("%H:%M") + " – " + ("24:00" if finishes == midnight(finishes) else finishes.strftime("%H:%M"))
             merged = {}
             for title, detail, users in result:
                 if title not in merged:
@@ -257,7 +264,7 @@ class DailyReports:
         return self.history.previous_report_groups(self.groups, today.date().isoformat())
 
     async def scheduled(self, group, start, end, *, generate=True):
-        day = start.date().isoformat()
+        day = (end if self.cutoff else start).date().isoformat()
         staged, pending = await asyncio.to_thread(self.staged, group, day)
         if not staged:
             if not generate:
@@ -271,37 +278,44 @@ class DailyReports:
             image = await asyncio.to_thread(combine_pending, [image for _, image in pending])
             await self.send(group, image)
             await asyncio.to_thread(self.delivered, group, day)
+            if self.notify:
+                try:
+                    async with asyncio.timeout(15):
+                        await self.notify(group, "今日群聊总结已完成，本次触发为自动触发", translate=False)
+                except Exception:
+                    log.warning("QQ daily report notification failed", exc_info=True)
 
     async def run(self):
         warmed = None
         cleaned = None
         while True:
             now = datetime.now(BEIJING)
-            today = midnight(now)
-            yesterday = today - timedelta(days=1)
-            generate = now < today + CATCHUP
+            end = self.period_end(now)
+            start = end - timedelta(days=1)
+            next_end = end + timedelta(days=1)
+            split = next_end - CATCHUP
+            generate = now < end + CATCHUP
             try:
-                retention_window = (today, generate)
+                retention_window = (end, generate)
                 if cleaned != retention_window:
-                    active = await asyncio.to_thread(self.previous_day_groups, today)
-                    await asyncio.to_thread(self.history.prune, today.timestamp(), active if generate else (), yesterday.timestamp())
-                    await asyncio.to_thread(self.expire_reports, (today - timedelta(days=7)).date().isoformat())
-                    self.cache = {key: result for key, result in self.cache.items() if key[1] >= yesterday.date()}
+                    registration_day = next_end if self.cutoff else end
+                    active = await asyncio.to_thread(self.previous_day_groups, registration_day)
+                    await asyncio.to_thread(self.history.prune, end.timestamp(), active if generate else (), start.timestamp())
+                    await asyncio.to_thread(self.expire_reports, (end - timedelta(days=7)).date().isoformat())
+                    self.cache = {key: result for key, result in self.cache.items() if key[1] >= start.date()}
                     cleaned = retention_window
                 for group in active:
                     try:
-                        await self.scheduled(group, yesterday, today, generate=generate)
+                        await self.scheduled(group, start, end, generate=generate)
                     except Exception:
                         log.warning("Scheduled QQ daily report failed for %s", self.aliases.get(group, "configured group"), exc_info=True)
-                split = today + timedelta(hours=23, minutes=55)
-                if now >= split and warmed != today:
-                    warmed = today
-                    await asyncio.gather(*(self.report(group, today, split, warm=True) for group in self.groups))
+                if now >= split and warmed != end:
+                    warmed = end
+                    await asyncio.gather(*(self.report(group, end, split, warm=True) for group in self.groups))
             except Exception:
                 log.exception("QQ daily report scheduler failed")
             now = datetime.now(BEIJING)
-            if midnight(now) != today:
+            if now >= next_end:
                 continue
-            boundary = min(point for point in (midnight(now) + timedelta(hours=23, minutes=55),
-                                                midnight(now) + timedelta(days=1)) if point > now)
+            boundary = min(point for point in (end + CATCHUP, split, next_end) if point > now)
             await asyncio.sleep(min(60, (boundary - now).total_seconds()))

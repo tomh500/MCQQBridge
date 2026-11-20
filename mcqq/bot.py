@@ -94,7 +94,9 @@ class QQBot(botpy.Client):
         self.expanded_store = reply_controls.ExpandedStore(settings["database"],
             settings.get("daily_waifu", {}).get("redis_url"))
         self.group_ai = GroupAI(settings)
-        self.daily_reports = DailyReports(self.group_ai, settings, self.send_group_report_image)
+        self.daily_reports = DailyReports(
+            self.group_ai, settings, self.send_group_report_image, notify=self.send_group_text,
+        )
         self.report_task = None
 
     async def bot_connect(self, session):
