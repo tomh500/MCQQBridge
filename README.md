@@ -70,7 +70,7 @@ QQ 开放平台 / QQ 群
 
 `/发命令 lobby|survival|proxy|ALL /指令 参数` 以已绑定玩家身份执行；子服离线时使用受限模拟 Player，proxy 仅支持在线玩家。`/大发命令 lobby|survival|proxy|ALL /指令 参数` 以目标进程 Console 身份执行，不要求绑定游戏账号。目标由 `chat_bridge.command_targets` 显式开放，`ALL` 对列表中每个目标各执行一次。`bot_roles.owners` 填 QQ 官方 member_openid；只有主人和管理可用 `/大发命令`，管理只能指定单个子服，proxy 与 ALL 仅限主人。主人用 `/设bot管理 @成员` 和 `/取缔bot管理 @成员` 即时调整管理名单；名单存于机器人数据库，不需重启。API 服务端核验身份和权限并记录审计；子服需启用 `remote.poll-commands`。远程配置含密钥，勿提交仓库。
 
-`/伺服器情报` 显示机器人所在主机的系统、内核、运行时间、内存和 CPU 占用率，以及主目录所在硬碟的剩余空间。SMP 在线人数来自 `survival` 或 `smp` 子服的状态快照。`/服状态 系统` 和 `/状态情报` 也可查看同一份情报。命令受 `chat_bridge.command_groups` 群白名单限制。
+`/伺服器情报` 显示机器人所在主机的系统、内核、运行时间、内存和 CPU 占用率，以及主目录所在硬碟的剩余空间。SMP 在线人数默认来自 `survival` 或 `smp` 子服的状态快照。Bot 与 Java 版 SMP 位于同一台机器时，可为 Bot 设置环境变量 `MCQQ_SMP_STATUS_PORT` 为 SMP 的游戏端口，直接读取该本机端口的服务器状态。`/服状态 系统` 和 `/状态情报` 也可查看同一份情报。命令受 `chat_bridge.command_groups` 群白名单限制。
 
 ## 配置与数据存取
 

@@ -1,7 +1,10 @@
 """Text-only adapter for the two allowed observation commands."""
 import asyncio
 from collections import OrderedDict
+import json
 import math
+import os
+import struct
 import time
 
 import aiohttp
@@ -66,6 +69,40 @@ def format_smp_online(data):
     return count
 
 
+async def read_status_length(reader):
+    value = 0
+    for shift in range(0, 21, 7):
+        byte = (await reader.readexactly(1))[0]
+        value |= (byte & 0x7f) << shift
+        if byte < 0x80:
+            return value, shift // 7 + 1
+    raise ValueError("oversized Minecraft status packet length")
+
+
+async def local_smp_online(port):
+    host = b"127.0.0.1"
+    # Java Edition handshake, unknown protocol version (-1), next state Status.
+    handshake = b"\x00\xff\xff\xff\xff\x0f" + bytes([len(host)]) + host + struct.pack(">H", port) + b"\x01"
+    async with asyncio.timeout(2):
+        reader, writer = await asyncio.open_connection(host.decode(), port)
+        try:
+            writer.write(bytes([len(handshake)]) + handshake + b"\x01\x00")
+            await writer.drain()
+            packet_size, _ = await read_status_length(reader)
+            if not 3 <= packet_size <= 131072 or await reader.readexactly(1) != b"\x00":
+                raise ValueError("invalid Minecraft status packet")
+            json_size, prefix_size = await read_status_length(reader)
+            if json_size != packet_size - 1 - prefix_size:
+                raise ValueError("invalid Minecraft status payload length")
+            data = json.loads(await reader.readexactly(json_size))
+            online, capacity = data["players"]["online"], data["players"]["max"]
+            if type(online) is not int or type(capacity) is not int or not 0 <= online <= capacity <= 100000:
+                raise ValueError("invalid Minecraft status player counts")
+            return f"{online}/{capacity} 人"
+        finally:
+            writer.close()
+
+
 async def reply(bot, message, *, formatter=format_status):
     now = time.monotonic()
     limits = getattr(bot, "status_limits", None)
@@ -81,6 +118,11 @@ async def reply(bot, message, *, formatter=format_status):
     payload = dict(schema_version=1, app_id=bot.settings["app_id"], group_openid=group,
                    member_openid=message.author.member_openid, event_id=message.id)
     try:
+        if formatter is format_smp_online and (port := os.getenv("MCQQ_SMP_STATUS_PORT")):
+            port = int(port)
+            if not 1 <= port <= 65535:
+                raise ValueError("invalid SMP status port")
+            return await local_smp_online(port)
         data = await asyncio.wait_for(bot.call_service(QUERY_PATH, payload), timeout=3)
         if not isinstance(data, dict):
             raise ValueError("invalid response")
@@ -89,5 +131,5 @@ async def reply(bot, message, *, formatter=format_status):
         if data.get("code") == "disabled":
             return "服务器状态查询尚未启用。"
         return formatter(data)
-    except (aiohttp.ClientError, asyncio.TimeoutError, ValueError, KeyError, TypeError, OverflowError):
+    except (aiohttp.ClientError, asyncio.TimeoutError, OSError, EOFError, ValueError, KeyError, TypeError, OverflowError):
         return "状态服务暂时不可用，请稍后重试。"

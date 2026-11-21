@@ -6,6 +6,8 @@ loopback sockets only; no QQ client is connected and no Minecraft process starts
 import asyncio
 from collections import OrderedDict
 import copy
+import json
+import os
 from pathlib import Path
 from types import SimpleNamespace
 import tempfile
@@ -152,6 +154,29 @@ class StatusContractTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(message.reply.await_args.kwargs["content"],
                          "【机器状态情报】\n系统：Ubuntu\nCPU 占用率：25.0%\n"
                          "硬碟剩余空间：20.0/50.0 GiB\nSMP 在线人数：3/50 人")
+
+    async def test_server_intelligence_can_query_local_smp_without_reporter(self):
+        async def respond(reader, writer):
+            try:
+                length = (await reader.readexactly(1))[0]
+                await reader.readexactly(length)
+                if await reader.readexactly(2) != b"\x01\x00":
+                    return
+                data = json.dumps({"players": {"online": 7, "max": 80}}).encode()
+                writer.write(bytes([len(data) + 2, 0, len(data)]) + data)
+                await writer.drain()
+            finally:
+                writer.close()
+
+        async with await asyncio.start_server(respond, "127.0.0.1", 0) as listener:
+            port = listener.sockets[0].getsockname()[1]
+            bot = self.bot()
+            bot.call_service = AsyncMock()
+            message = self.message("/伺服器情报")
+            with patch.dict(os.environ, {"MCQQ_SMP_STATUS_PORT": str(port)}):
+                await bot.on_group_message_create(message)
+            self.assertIn("SMP 在线人数：7/80 人", message.reply.await_args.kwargs["content"])
+            bot.call_service.assert_not_awaited()
 
     async def test_missing_snapshots_and_offline_are_distinct(self):
         missing = self.item(await self.read())
