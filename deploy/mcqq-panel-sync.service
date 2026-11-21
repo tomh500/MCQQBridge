@@ -1,0 +1,12 @@
+[Unit]
+Description=Refresh QQ group command panel
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/mcqq-bridge
+Environment=MCQQ_SETTINGS=%h/mcqq-bridge/settings.yml
+ExecStart=%h/mcqq-bridge/.venv/bin/python %h/mcqq-bridge/sync_group_panel.py
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true

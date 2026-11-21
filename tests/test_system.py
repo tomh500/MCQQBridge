@@ -266,25 +266,56 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
     def test_qq_panel_fields_fit_official_display_width_limits(self):
         from sync_commands import panel_config, display_width
         panel = panel_config()
-        self.assertEqual(len(panel["items"]), 20)
-        self.assertIn("跨群信息", [item["name"] for item in panel["items"]])
-        self.assertIn("发命令", [item["name"] for item in panel["items"]])
-        self.assertIn("大发命令", [item["name"] for item in panel["items"]])
-        self.assertIn("设bot管理", [item["name"] for item in panel["items"]])
-        self.assertIn("取缔bot管理", [item["name"] for item in panel["items"]])
-        self.assertIn("状态情报", [item["name"] for item in panel["items"]])
-        self.assertIn("今日老婆", [item["name"] for item in panel["items"]])
+        self.assertLessEqual(len(panel["items"]), 20)
+        self.assertEqual([item["name"] for item in panel["items"]],
+                         ["SMP头衔", "群讯息情报统计", "群友情报", "SMP账号", "帮助",
+                          "跨群信息", "发命令", "伺服器情报", "今日老婆"])
         self.assertEqual(display_width("本群ID"), 6)
         for item in panel["items"]:
             self.assertLessEqual(display_width(item["name"]), 14)
             self.assertLessEqual(display_width(item["desc"]), 30)
 
     def test_explicit_commands_and_action_specific_hints(self):
+        from mcqq.commands import HELP, expand_command_group
+
+        paired_commands = (
+            ("/SMP账号 绑定 Java Steve", "/绑定Java Steve"),
+            ("/SMP账号 绑定 基岩 Xbox Name", "/绑定基岩 Xbox Name"),
+            ("/SMP账号 换绑 Java Alex", "/换绑Java Alex"),
+            ("/SMP账号 换绑 基岩 Xbox Name", "/换绑基岩 Xbox Name"),
+            ("/SMP账号 关联 Xbox Name", "/关联基岩 Xbox Name"),
+            ("/SMP账号 查询", "/我的绑定"),
+            ("/SMP账号 解绑 确认", "/解绑 确认"),
+            ("/SMP账号 解除关联 确认", "/解除关联 确认"),
+            ("/SMP头衔 设置 测试头衔", "/设置头衔 测试头衔"),
+            ("/SMP头衔 清除", "/清除头衔"),
+            ("/服状态 系统", "/状态情报"),
+            ("/伺服器情报", "/服状态 系统"),
+            ("/服状态 在线", "/在线"),
+        )
+        for grouped, standalone in paired_commands:
+            with self.subTest(command=grouped):
+                self.assertEqual(parse(grouped), parse(standalone))
+        self.assertEqual(expand_command_group("/群情报 今日"), "/群讯息情报统计")
+        self.assertEqual(expand_command_group("/群情报 重置"), "/群友情报 重置")
+
+        self.assertEqual(parse("/SMP账号 换绑 基岩 Xbox Name"), ("rebind", "bedrock", "Xbox Name"))
+        self.assertEqual(parse("/SMP账号 解绑 确认"), ("unbind", None, "确认"))
+        self.assertEqual(parse("/SMP头衔 清除"), ("title_clear", None, ""))
+        self.assertEqual(parse("/服状态 系统"), ("system_info", None, None))
+        self.assertEqual(expand_command_group("/群情报 成员 <@!target>"), "/群友情报 <@!target>")
+        self.assertEqual(expand_command_group("/换老婆"), "/换老婆")
+        for command in ("/SMP头衔", "/群情报", "/SMP账号", "/服状态"):
+            with self.subTest(command=command), self.assertRaisesRegex(ValueError, command):
+                expand_command_group(command)
         self.assertEqual(parse("/发命令 survival /say  hi !"), ("game_command", "survival", "/say  hi !"))
         self.assertEqual(parse("/大发命令 总代 /end"), ("console_command", "proxy", "/end"))
         self.assertEqual(parse("/大发命令 ALL say hi @a"), ("console_command", "ALL", "/say hi @a"))
+        self.assertEqual(parse("/大发命令 survival /say  hi !"), ("console_command", "survival", "/say  hi !"))
+        self.assertIn("/大发命令 服务器名 /指令 参数", HELP)
         self.assertEqual(parse("/设bot管理 <@!" + "A"*32 + ">"), ("admin_add", None, "<@!" + "A"*32 + ">"))
         self.assertEqual(parse("/取缔bot管理 @" + "A"*32), ("admin_remove", None, "@" + "A"*32))
+        self.assertEqual(parse("/取消bot管理 @" + "A"*32), ("admin_remove", None, "@" + "A"*32))
         self.assertEqual(parse("/状态情报"), ("system_info", None, None))
         self.assertEqual(parse("/今日老婆"), ("daily_waifu", None, None))
         with self.assertRaises(ValueError): parse("/发命令 /say hi")

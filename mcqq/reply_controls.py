@@ -47,7 +47,7 @@ def chunks(text, limit=1700):
         if boundary < limit // 2:
             boundary = limit
         yield text[:boundary]
-        text = text[boundary:].lstrip("\n")
+        text = text[boundary:]
 
 
 class ExpandedStore:

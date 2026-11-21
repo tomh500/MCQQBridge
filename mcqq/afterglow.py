@@ -6,6 +6,7 @@ import logging
 from pathlib import Path
 
 import aiohttp
+import yaml
 
 log = logging.getLogger(__name__)
 
@@ -18,8 +19,9 @@ class Afterglow:
 
     async def respond(self, user_openid, text):
         try:
-            cfg = json.loads(self.path.read_text(encoding="utf-8-sig"))
-        except (OSError, ValueError):
+            from .config import read_mapping
+            cfg = read_mapping(self.path)
+        except (OSError, ValueError, yaml.YAMLError):
             return "Afterglow 私聊接入尚未配置，请联系管理员。"
         if user_openid not in cfg.get("official_users", []):
             return "此私聊功能仅向已授权用户开放。"
