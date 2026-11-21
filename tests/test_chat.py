@@ -255,6 +255,42 @@ class ChatTests(unittest.IsolatedAsyncioTestCase):
         bot.api.post_group_message.assert_not_awaited()
         bot.relay_group.assert_awaited_once_with(normal)
 
+    async def test_cross_group_mode_can_be_managed_for_a_mentioned_member(self):
+        bot = self.cross_group_bot()
+        bot.role_for = AsyncMock(return_value="member")
+        message = self.cross_group_message
+        subject = "A" * 32
+        mention = "<@!" + subject + ">"
+        enable = "/跨群信息 临时全量模式 二群,third !" + mention
+        stop = "/跨群信息 结束全量模式 " + mention
+        await bot.on_group_message_create(message("rejected-start", enable))
+        self.assertIn("只有 Bot 主人或管理员", bot.reply_group_text.await_args.args[1])
+        self.assertIsNone(bot.active_cross_group_mode(subject))
+
+        bot.role_for.return_value = "admin"
+        await bot.on_group_message_create(message("admin-start", enable, member="admin"))
+        bot.role_for.assert_awaited_with("group", "admin")
+        self.assertIn("为指定成员开启", bot.reply_group_text.await_args.args[1])
+        self.assertIsNone(bot.active_cross_group_mode("admin"))
+        bot.reply_group_text.reset_mock()
+        await bot.on_group_message_create(message("forward", "正在聊天", member=subject.lower()))
+        self.assertEqual([item.kwargs["group_openid"] for item in bot.api.post_group_message.await_args_list],
+                         ["other", "third"])
+        bot.reply_group_text.assert_not_awaited()
+
+        bot.role_for.return_value = "member"
+        await bot.on_group_message_create(message("rejected-stop", stop))
+        self.assertIsNotNone(bot.active_cross_group_mode(subject))
+        bot.role_for.return_value = "owner"
+        await bot.on_group_message_create(message("owner-stop", stop, member="owner"))
+        self.assertIn("结束指定成员", bot.reply_group_text.await_args.args[1])
+        self.assertIsNone(bot.active_cross_group_mode(subject))
+
+        raw = {"mentions": [{"member_openid": subject}]}
+        await bot.on_group_message_create(message(
+            "owner-all", "/跨群信息 临时全量模式 !@群友", member="owner", raw=raw))
+        self.assertIsNone(bot.active_cross_group_mode(subject)[1])
+
     async def test_cross_group_quote_uses_qq_receipt_and_takes_priority_over_mode(self):
         bot = self.cross_group_bot()
         message = self.cross_group_message

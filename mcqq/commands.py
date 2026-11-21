@@ -29,6 +29,7 @@ HELP = """【SMP 入服与账户】
 引用回复 Bot 转发的跨群消息，可直接发回原来源群。
 /跨群信息 临时全量模式 一群,二群 —— 自动转发你的消息 2 小时。用英文逗号分隔群别名或 ID，省略范围即 ALL。再次执行会更新范围和两小时有效期。
 /跨群信息 结束全量模式 —— 立即停止自动转发
+Bot 主人和管理员可通过 /跨群信息 临时全量模式 一群,二群 !@成员 为指定成员开启，或用 /跨群信息 结束全量模式 @成员 关闭。
 
 【游戏指令与 Bot 管理】
 /发命令 子服 /指令 参数 —— 以绑定玩家身份执行，proxy 仅限在线玩家
@@ -135,11 +136,13 @@ def parse(text):
             return "cross_group_list", None, None
         target, *body = argument.split(maxsplit=1)
         if target == "临时全量模式":
-            return "cross_group_mode_start", body[0] if body else "ALL", None
+            scope = body[0] if body else ""
+            delegated = re.fullmatch(r"([\s\S]*?)!\s*(<@!?[^>\s]+>|@\S[\s\S]*)", scope)
+            if delegated:
+                return "cross_group_mode_start", delegated.group(1).strip() or "ALL", delegated.group(2)
+            return "cross_group_mode_start", scope or "ALL", None
         if target == "结束全量模式":
-            if body:
-                raise ValueError("用法：/跨群信息 结束全量模式")
-            return "cross_group_mode_stop", None, None
+            return "cross_group_mode_stop", None, body[0] if body else None
         match = re.fullmatch(r"\[([^\]]+)\]\s+([\s\S]+)", argument)
         if match:
             target, content = match.group(1).strip(), match.group(2)

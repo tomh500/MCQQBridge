@@ -617,17 +617,33 @@ class QQBot(botpy.Client):
                 "直接引用回复 Bot 转发的消息，可回传到来源群。",
                 "/跨群信息 临时全量模式 群别名,群ID（2 小时，省略范围时为 ALL）",
                 "/跨群信息 结束全量模式",
+                "/跨群信息 临时全量模式 群别名,群ID !@成员（Bot 主人和管理员）",
+                "/跨群信息 结束全量模式 @成员（Bot 主人和管理员）",
             ))
             return "\n".join(lines)
         member = getattr(getattr(message, "author", None), "member_openid", None)
         if not member or not getattr(message, "id", None):
             return "缺少 QQ 官方身份凭证，请重新发送命令。"
-        if action == "cross_group_mode_stop":
-            getattr(self, "cross_group_modes", {}).pop(member, None)
-            getattr(self, "cross_group_mode_updates", {}).pop(member, None)
-            return "已结束你的临时全量模式。"
-        if action == "cross_group_mode_start":
-            return await self.start_cross_group_mode(member, target, aliases)
+        if action in ("cross_group_mode_start", "cross_group_mode_stop"):
+            subject = member
+            delegated = content is not None
+            if delegated:
+                subject = mentioned_member(message, content)
+                if not subject:
+                    return "请使用 QQ 的 @ 功能指定一名群友。"
+                try:
+                    role = await self.role_for(group, member)
+                except (aiohttp.ClientError, asyncio.TimeoutError, KeyError, ValueError):
+                    return "暂时无法核验 Bot 管理权限，请稍后重试。"
+                if role not in ("owner", "admin"):
+                    return "只有 Bot 主人或管理员可以为其他成员开关临时全量模式。"
+            subject = subject.upper()
+            if action == "cross_group_mode_stop":
+                getattr(self, "cross_group_modes", {}).pop(subject, None)
+                getattr(self, "cross_group_mode_updates", {}).pop(subject, None)
+                owner = "指定成员的" if delegated else "你的"
+                return f"已结束{owner}临时全量模式。"
+            return await self.start_cross_group_mode(subject, target, aliases, delegated=delegated)
         matches = await self.match_cross_groups(target) if target and target.upper() != "ALL" else []
         if len(matches) > 1 or (action == "cross_group" and target.upper() != "ALL" and not matches):
             return "目标群未找到或名称有歧义；发送 /跨群信息 查询可用群。"
@@ -646,7 +662,7 @@ class QQBot(botpy.Client):
             return f"{response}\n{warning}" if response else warning
         return response
 
-    async def start_cross_group_mode(self, member, target, aliases):
+    async def start_cross_group_mode(self, member, target, aliases, *, delegated=False):
         updates = getattr(self, "cross_group_mode_updates", None)
         if updates is None:
             self.cross_group_mode_updates = updates = {}
@@ -668,12 +684,14 @@ class QQBot(botpy.Client):
             self.cross_group_modes = {key: mode for key, mode in modes.items() if mode[0] > now}
             self.cross_group_modes[member] = (now + CROSS_GROUP_MODE_SECONDS, scope)
             label = "ALL" if scope is None else "、".join(aliases.get(item) or item for item in dict.fromkeys(scope))
-            return f"已开启临时全量模式，有效期从现在起 2 小时。\n转发范围：{label}（自动跳过发言所在群）"
+            started = "已为指定成员开启临时全量模式" if delegated else "已开启临时全量模式"
+            return f"{started}，有效期从现在起 2 小时。\n转发范围：{label}（自动跳过发言所在群）"
         finally:
             if updates.get(member) is request:
                 del updates[member]
 
     def active_cross_group_mode(self, member):
+        member = member.upper()
         modes = getattr(self, "cross_group_modes", {})
         mode = modes.get(member)
         if mode and mode[0] > time.monotonic():
