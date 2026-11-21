@@ -1,50 +1,60 @@
 import re
 
-HELP = """【MC 入服与双端共通】
-/SMP账号 绑定|换绑 Java|基岩 游戏名；/SMP账号 关联 Xbox昵称；/SMP账号 查询|解绑|解除关联
-/SMP头衔 设置 文字；/SMP头衔 清除
-/服状态 在线|系统
-/群情报 今日|成员 @群友|重置
-发送一级命令可查看详细用法。
+HELP = """【SMP 入服与账户】
+/SMP账号 绑定 Java 游戏名 或 /绑定Java 游戏名
+/SMP账号 绑定 基岩 Xbox昵称 或 /绑定基岩 Xbox昵称
+/SMP账号 关联 Xbox昵称 或 /关联基岩 Xbox昵称
+双端共用存档时先绑定 Java，再申请关联，最后在 Java 游戏内按提示验证。
+/SMP账号 查询 或 /我的绑定 —— 查看入服资格、主账号与关联状态
+/SMP账号 换绑 Java|基岩 名字 或 /换绑Java 游戏名、/换绑基岩 Xbox昵称 —— 更换主账号与入服资格，存档保留在原账号
+/SMP账号 解除关联 或 /解除关联 —— 移除基岩关联，保留 Java 主账号
+/SMP账号 解绑 或 /解绑 —— 退出白名单，保留游戏存档
+解绑和解除关联会先显示影响，确认后在命令末尾加「确认」。
 
-/服务器 或 /在线 —— 查看各服人数与状态快照
-只玩 Java：/绑定Java 游戏名
-只玩基岩：/绑定基岩 Xbox昵称
-两端共用 Java 存档：先绑定Java，再 /关联基岩 Xbox昵称，按提示在 Java 游戏内验证。
-★ 两端名字相同也需要关联验证，名字相同不代表同一个账号。
+【头衔与服务器】
+/SMP头衔 设置 文字 或 /设置头衔 文字 —— 设置头衔，最多 10 个字符
+/SMP头衔 清除 或 /清除头衔 —— 恢复默认身份标签
+设置和清除共用冷却时间，普通群员 1 小时，群主和管理员 30 秒。
+/服状态 在线 或 /在线、/服务器 —— 查看各服在线人数
+/伺服器情报 或 /服状态 系统、/状态情报 —— 查看系统、内存、CPU、硬碟空间及 SMP 在线人数
+/群服互通 —— 查看 QQ 与游戏的互通方式
 
-【管理自己的账号】
-/我的绑定 —— 查看主账号、基岩关联与下一步
-/换绑Java 新名字 或 /换绑基岩 新Xbox昵称 —— 更换主账号，旧账号失去入服资格；不会搬运存档
-/解除关联 —— 仅移除基岩关联，Java 主号保留
-/解绑 —— 退出白名单，保留游戏存档
-/设置头衔 文字 —— 设置自己的群服头衔，最多10个字符
-/清除头衔 —— 清除自己的群服头衔
-/发命令 子服 /指令 参数 —— 以绑定玩家身份执行；proxy 仅限在线
-/大发命令 子服 /指令 参数 —— 以 Console 身份执行，仅 Bot 主人或管理
-/设bot管理 @成员、/取缔bot管理 @成员 —— 仅 Bot 主人
-/状态情报 —— 查看机器系统、运行时长和内存占用
-/今日老婆 —— 每天抽取一位角色，首次可换一次；再查维持相同结果
-/换老婆 —— 更换今天抽到的角色
-/今日老婆 许愿 角色名；/今日老婆 积分点 查询
-/今日老婆 重置 —— 主人清除今天所有人的抽取与换取次数
-/历史讯息向量化 —— 整理本群所有保留的缓存并保存记忆，仅 Bot 主人或管理
-/群讯息情报统计 —— 绘制今日发言星图与话题，仅 Bot 主人或管理
-/群友情报 @群友 —— 生成本群成员的聊天画像
-/群友情报 重置 —— Bot 主人或管理员重置本群的群友情报限额
-/跨群信息 —— 查询可用群和ID；/跨群信息 [群名] 内容 或 /跨群信息 ALL 内容
-设置/清除共用冷却：普通群员1小时；群主、管理员30秒。
+【群情报与跨群】
+/群讯息情报统计 或 /群情报 今日 —— 绘制今日聊天星图与话题，仅 Bot 主人或管理
+/群友情报 @群友 或 /群情报 成员 @群友 —— 生成聊天画像
+/群友情报 重置 或 /群情报 重置 —— 重置本群群友情报名额，仅 Bot 主人或管理
+/历史讯息向量化 —— 整理本群历史聊天并保存记忆，仅 Bot 主人或管理
+/跨群信息 —— 查询目标群和 ID
+/跨群信息 群别名 内容 —— 定向发送。使用 ALL 或省略目标时发往其他授权群
+引用回复 Bot 转发的跨群消息，可直接发回原来源群。
+/跨群信息 临时全量模式 一群,二群 —— 自动转发你的消息 2 小时。用英文逗号分隔群别名或 ID，省略范围即 ALL。再次执行会更新范围和两小时有效期。
+/跨群信息 结束全量模式 —— 立即停止自动转发
+Bot 主人和管理员可通过 /跨群信息 临时全量模式 一群,二群 !@成员 为指定成员开启，或用 /跨群信息 结束全量模式 @成员 关闭。
 
-每条命令前请 @机器人。名字中有空格可原样填写。"""
+【游戏指令与 Bot 管理】
+/发命令 子服 /指令 参数 —— 以绑定玩家身份执行，proxy 仅限在线玩家
+/大发命令 服务器名 /指令 参数 —— 手动输入，以控制台身份执行
+Bot 管理可指定一个已授权的子服。Bot 主人也可用 proxy（总代）或 ALL。
+/设bot管理 @成员 —— 添加 Bot 管理，仅 Bot 主人
+/取消bot管理 @成员 或 /取缔bot管理 @成员 —— 移除 Bot 管理，仅 Bot 主人
+
+【今日老婆】
+/今日老婆 —— 抽取或查看今日角色。/换老婆 可换一次
+/今日老婆 许愿 角色名 —— 首次抽取前许愿，花费 16 积分并消耗当天交换机会
+/今日老婆 积分点 查询 —— 查看自己的积分
+/今日老婆 重置 —— 清除本日抽取与交换记录，仅 Bot 主人
+
+发送 /SMP账号、/SMP头衔、/群情报 或 /服状态 可查看该组的用法。Xbox 昵称中的空格可原样填写。"""
 
 COMMANDS = (
-    ("SMP头衔", "设置或清除群服头衔"),
-    ("群情报", "查看今日统计和群友画像"),
-    ("SMP账号", "绑定换绑双端关联及查询"),
-    ("帮助", "查看完整使用步骤"),
-    ("跨群信息", "向其他授权群发送消息"),
+    ("SMP头衔", "设置或清除自己的群服头衔"),
+    ("群讯息情报统计", "今日群聊星图与话题"),
+    ("群友情报", "指定群友生成聊天画像"),
+    ("SMP账号", "入服绑定、双端关联、换绑查询"),
+    ("帮助", "查看完整命令和用法"),
+    ("跨群信息", "跨群转发及临时全量模式"),
     ("发命令", "以绑定玩家身份执行游戏指令"),
-    ("服状态", "在线人数或服务器系统状态"),
+    ("伺服器情报", "查看主机资源和SMP在线人数"),
     ("今日老婆", "每日抽一位，可换一次"),
 )
 
@@ -52,7 +62,14 @@ COMMAND_GROUPS = {
     "SMP账号": ({
         "绑定": ("绑定", True), "换绑": ("换绑", True), "关联": ("关联基岩", True),
         "查询": ("我的绑定", False), "解绑": ("解绑", None), "解除关联": ("解除关联", None),
-    }, "/SMP账号 绑定|换绑 Java|基岩 游戏名\n/SMP账号 关联 Xbox昵称\n/SMP账号 查询\n/SMP账号 解绑 [确认]\n/SMP账号 解除关联 [确认]"),
+    }, """【SMP 账号】
+/SMP账号 绑定 Java 游戏名
+/SMP账号 绑定 基岩 Xbox昵称
+/SMP账号 关联 Xbox昵称 —— 让基岩端共用已绑定的 Java 存档
+/SMP账号 查询 —— 查看主账号与关联状态
+/SMP账号 换绑 Java|基岩 新名字 —— 更换对应版本的主账号
+/SMP账号 解绑 [确认] —— 退出白名单
+/SMP账号 解除关联 [确认] —— 只移除基岩关联"""),
     "SMP头衔": ({
         "设置": ("设置头衔", True), "清除": ("清除头衔", False),
     }, "/SMP头衔 设置 文字（最多10字）\n/SMP头衔 清除"),
@@ -95,14 +112,14 @@ def parse(text):
         if argument:
             raise ValueError("格式：/今日老婆 或 /今日老婆 重置")
         return "daily_waifu", None, None
-    if command in ("设bot管理", "取缔bot管理"):
+    if command in ("设bot管理", "取缔bot管理", "取消bot管理"):
         argument = text[len(command):].strip()
         if not argument:
             raise ValueError(f"格式：/{command} @成员")
         return ("admin_add" if command == "设bot管理" else "admin_remove"), None, argument
-    if command == "状态情报":
+    if command in ("伺服器情报", "状态情报"):
         if text[len(command):].strip():
-            raise ValueError("格式：/状态情报")
+            raise ValueError(f"格式：/{command}")
         return "system_info", None, None
     if command in ("发命令", "大发命令"):
         argument = text[len(command):].strip().split(maxsplit=1)
@@ -117,17 +134,29 @@ def parse(text):
         argument = text[len(command):].strip()
         if not argument:
             return "cross_group_list", None, None
+        target, *body = argument.split(maxsplit=1)
+        if target == "临时全量模式":
+            scope = body[0] if body else ""
+            delegated = re.fullmatch(r"([\s\S]*?)!\s*(<@!?[^>\s]+>|@\S[\s\S]*)", scope)
+            if delegated:
+                return "cross_group_mode_start", delegated.group(1).strip() or "ALL", delegated.group(2)
+            return "cross_group_mode_start", scope or "ALL", None
+        if target == "结束全量模式":
+            return "cross_group_mode_stop", None, body[0] if body else None
         match = re.fullmatch(r"\[([^\]]+)\]\s+([\s\S]+)", argument)
         if match:
             target, content = match.group(1).strip(), match.group(2)
-        else:
-            pieces = argument.split(maxsplit=1)
-            if len(pieces) != 2:
-                raise ValueError("格式：/跨群信息 [群名/别名] 内容；或 /跨群信息 ALL 内容")
-            target, content = pieces
-        if not target or not content.strip():
-            raise ValueError("格式：/跨群信息 [群名/别名] 内容；或 /跨群信息 ALL 内容")
-        return "cross_group", target, content
+            if not target:
+                raise ValueError("格式：/跨群信息 [群名/别名] 内容")
+            return "cross_group", target, content
+        if argument.startswith("["):
+            raise ValueError("格式：/跨群信息 [群名/别名] 内容")
+        if body and target.upper() == "ALL":
+            return "cross_group", target, body[0]
+        if body and re.fullmatch(r"[0-9a-f]{32}", target, re.IGNORECASE):
+            return "cross_group", target, body[0]
+        # Only the bot knows whether the first word names a configured target.
+        return "cross_group_implicit", target if body else None, argument
     if command in ("服务器", "在线"):
         if len(parts) != 1:
             raise ValueError("格式：/服务器 或 /在线；不接受附加参数。")

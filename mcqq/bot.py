@@ -36,6 +36,8 @@ class RichGroupMessage(GroupMessage):
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
 GROUP_MENTION = re.compile(r"<@!?([0-9a-f]{32})>", re.IGNORECASE)
+CROSS_GROUP_COMMAND = re.compile(r"^/跨群信息(?:\s|$)")
+CROSS_GROUP_MODE_SECONDS = 2 * 60 * 60
 
 
 def plain_game_output(value):
@@ -90,6 +92,9 @@ class QQBot(botpy.Client):
         self.afterglow = Afterglow(settings["afterglow_connection"]) if settings.get("features", {}).get("private_ai", False) else None
         self.group_names = {}
         self.seen = OrderedDict()
+        self.cross_group_modes = {}
+        self.cross_group_mode_updates = {}
+        self.cross_group_receipts = OrderedDict()
         self.chat_task = None
         self.expanded_store = reply_controls.ExpandedStore(settings["database"],
             settings.get("daily_waifu", {}).get("redis_url"))
@@ -263,10 +268,12 @@ class QQBot(botpy.Client):
         return result.get("role", "member")
 
     async def post_full(self, group, content, *, msg_id=None, event_id=None):
+        receipts = []
         for sequence, chunk in enumerate(reply_controls.chunks(content), 1):
             kwargs = {"msg_id": msg_id, "msg_seq": sequence} if msg_id else {"event_id": event_id, "msg_seq": sequence}
-            await self.api.post_group_message(group_openid=group, msg_type=0,
-                                              content=chunk, **kwargs)
+            receipts.append(await self.api.post_group_message(group_openid=group, msg_type=0,
+                                                              content=chunk, **kwargs))
+        return receipts
 
     async def send_expanded(self, group, token, member, *, msg_id=None):
         try:
@@ -457,10 +464,20 @@ class QQBot(botpy.Client):
         if group not in self.settings.get("allowed_groups", []):
             return "本群尚未开放绑定，请让服主配置 /本群ID 返回的标识。"
         if action == "system_info":
-            try:
-                return await asyncio.to_thread(system_info.read_system_info)
-            except (OSError, ValueError, KeyError):
-                return "机器状态暂时无法读取。"
+            host, metrics, smp = await asyncio.gather(
+                asyncio.to_thread(system_info.read_system_info),
+                asyncio.to_thread(system_info.read_extra_metrics),
+                status_bot.reply(self, message, formatter=status_bot.format_smp_online)
+                if member and getattr(message, "id", None) else asyncio.sleep(0, result="缺少 QQ 官方身份凭证。"),
+                return_exceptions=True,
+            )
+            if isinstance(host, Exception):
+                host = "机器状态暂时无法读取。"
+            if isinstance(metrics, Exception):
+                metrics = "CPU 和硬碟状态暂时无法读取。"
+            if isinstance(smp, Exception):
+                smp = "状态服务暂时不可用。"
+            return f"{host}\n{metrics}\nSMP 在线人数：{smp}"
         if action in ("admin_add", "admin_remove"):
             if not member or not getattr(message, "id", None):
                 return "缺少 QQ 官方身份凭证。"
@@ -478,54 +495,8 @@ class QQBot(botpy.Client):
                 return "已" + ("设置" if action == "admin_add" else "取缔") + " Bot 管理：" + target
             except (aiohttp.ClientError, asyncio.TimeoutError, ValueError, KeyError):
                 return "Bot 管理设置暂时不可用。"
-        if action == "cross_group_list":
-            outbound = self.settings.get("chat_bridge", {}).get("outbound_groups", self.settings.get("allowed_groups", []))
-            if not outbound:
-                return "目前没有开放跨群目标。"
-            aliases = self.settings.get("chat_bridge", {}).get("group_aliases", {})
-            lines = ["【可用跨群目标】"]
-            for target in outbound:
-                label = aliases.get(target) or await self.group_name(target) or target
-                lines.append(f"{label}：{target}" + ("（本群）" if target == group else ""))
-            lines.append("发送：/跨群信息 [群名/别名] 内容；单词别名也可不加[]。")
-            lines.append("/跨群信息 ALL 内容 会发送到上列全部群，包含本群。")
-            return "\n".join(lines)
-        if action == "cross_group":
-            author = getattr(message, "author", None)
-            if not getattr(author, "member_openid", None) or not getattr(message, "id", None):
-                return "缺少 QQ 官方身份凭证，请重新发送命令。"
-            outbound = self.settings.get("chat_bridge", {}).get("outbound_groups", self.settings.get("allowed_groups", []))
-            if platform.upper() == "ALL":
-                destinations = list(outbound)
-            else:
-                destination = await self.resolve_group(platform)
-                if destination is None:
-                    return "目标群未找到或名称有歧义；发送 /跨群信息 查询可用群。"
-                if destination == group:
-                    return "目标群就是本群；如需广播全部群，请使用 ALL。"
-                destinations = [destination]
-            if not destinations:
-                return "目前没有开放跨群目标。"
-            if len(name) > 2000 or any(ord(char) < 32 and char != "\t" for char in name):
-                return "消息过长或含有控制字符（最多 2000 字符）。"
-            aliases = self.settings.get("chat_bridge", {}).get("group_aliases", {})
-            source = aliases.get(group) or await self.group_name(group) or group
-            sender = (getattr(author, "nickname", None) or getattr(author, "username", None)
-                      or getattr(author, "member_openid", "群友"))
-            sender = re.sub(r"[\r\n\x00-\x1f]", "", str(sender))[:64]
-            content = f"【跨群信息｜{source}】{sender}：{name}"
-            if len(content) > 2000:
-                return "消息含来源标记后超过 2000 字符，请缩短内容。"
-            delivered = []
-            for destination in destinations:
-                try:
-                    await self.send_group_text(destination, content, translate=False)
-                    delivered.append(destination)
-                except Exception:
-                    log.exception("Cross-group delivery failed for %s", destination)
-            if len(delivered) != len(destinations):
-                return f"已发送到 {len(delivered)}/{len(destinations)} 个群；部分群发送失败。"
-            return f"已发送到 {len(delivered)} 个群。"
+        if action.startswith("cross_group"):
+            return await self.cross_group_command(message, action, platform, name)
         if action in ("game_command", "console_command"):
             author = getattr(message, "author", None)
             member = str(getattr(author, "member_openid", "") or "")
@@ -627,15 +598,200 @@ class QQBot(botpy.Client):
             log.warning("Binding service request failed")
             return "绑定服务暂时不可用，请稍后重试；可用 /我的绑定 确认上次操作是否已完成。"
 
-    async def resolve_group(self, requested):
+    def cross_group_outbound(self):
         allowed = self.settings.get("allowed_groups", [])
-        outbound = self.settings.get("chat_bridge", {}).get("outbound_groups", allowed)
+        return self.settings.get("chat_bridge", {}).get("outbound_groups", allowed)
+
+    async def cross_group_command(self, message, action, target, content):
+        group = message.group_openid
+        outbound = self.cross_group_outbound()
+        aliases = self.settings.get("chat_bridge", {}).get("group_aliases", {})
+        if action == "cross_group_list":
+            lines = ["【可用跨群目标】"]
+            for destination in outbound:
+                label = aliases.get(destination) or await self.group_name(destination) or destination
+                lines.append(f"{label}：{destination}" + ("（本群）" if destination == group else ""))
+            lines.extend((
+                "/跨群信息 [群名/别名] 内容（单词别名可省略方括号）",
+                "/跨群信息 ALL 内容（发送到所有其他授权群）",
+                "直接引用回复 Bot 转发的消息，可回传到来源群。",
+                "/跨群信息 临时全量模式 群别名,群ID（2 小时，省略范围时为 ALL）",
+                "/跨群信息 结束全量模式",
+                "/跨群信息 临时全量模式 群别名,群ID !@成员（Bot 主人和管理员）",
+                "/跨群信息 结束全量模式 @成员（Bot 主人和管理员）",
+            ))
+            return "\n".join(lines)
+        member = getattr(getattr(message, "author", None), "member_openid", None)
+        if not member or not getattr(message, "id", None):
+            return "缺少 QQ 官方身份凭证，请重新发送命令。"
+        if action in ("cross_group_mode_start", "cross_group_mode_stop"):
+            subject = member
+            delegated = content is not None
+            if delegated:
+                subject = mentioned_member(message, content)
+                if not subject:
+                    return "请使用 QQ 的 @ 功能指定一名群友。"
+                try:
+                    role = await self.role_for(group, member)
+                except (aiohttp.ClientError, asyncio.TimeoutError, KeyError, ValueError):
+                    return "暂时无法核验 Bot 管理权限，请稍后重试。"
+                if role not in ("owner", "admin"):
+                    return "只有 Bot 主人或管理员可以为其他成员开关临时全量模式。"
+            subject = subject.upper()
+            if action == "cross_group_mode_stop":
+                getattr(self, "cross_group_modes", {}).pop(subject, None)
+                getattr(self, "cross_group_mode_updates", {}).pop(subject, None)
+                owner = "指定成员的" if delegated else "你的"
+                return f"已结束{owner}临时全量模式。"
+            return await self.start_cross_group_mode(subject, target, aliases, delegated=delegated)
+        matches = await self.match_cross_groups(target) if target and target.upper() != "ALL" else []
+        if len(matches) > 1 or (action == "cross_group" and target.upper() != "ALL" and not matches):
+            return "目标群未找到或名称有歧义；发送 /跨群信息 查询可用群。"
+        destination = matches[0] if matches else None
+        implicit_all = action == "cross_group_implicit" and not destination
+        if destination == group:
+            return "目标群就是本群，请选择其他群。"
+        if action == "cross_group_implicit" and destination is not None:
+            content = content.split(maxsplit=1)[1]
+        response = await self.forward_cross_group(
+            message, content, [destination] if destination else outbound,
+            quiet=self.active_cross_group_mode(member) is not None,
+        )
+        if implicit_all:
+            warning = "⚠️ 未指定目标群，已按 ALL 处理。建议用 /跨群信息 群别名 信息 指定目标。"
+            return f"{response}\n{warning}" if response else warning
+        return response
+
+    async def start_cross_group_mode(self, member, target, aliases, *, delegated=False):
+        updates = getattr(self, "cross_group_mode_updates", None)
+        if updates is None:
+            self.cross_group_mode_updates = updates = {}
+        request = updates[member] = object()
+        try:
+            scope = None
+            if target.upper() != "ALL":
+                scope = []
+                for name in target.split(","):
+                    name = name.strip()
+                    matches = await self.match_cross_groups(name) if name else []
+                    if updates.get(member) is not request:
+                        return
+                    if len(matches) != 1:
+                        return f"全量模式目标「{name}」未找到或有歧义，请用英文逗号分隔群别名或群 ID。"
+                    scope.append(matches[0])
+            now = time.monotonic()
+            modes = getattr(self, "cross_group_modes", {})
+            self.cross_group_modes = {key: mode for key, mode in modes.items() if mode[0] > now}
+            self.cross_group_modes[member] = (now + CROSS_GROUP_MODE_SECONDS, scope)
+            label = "ALL" if scope is None else "、".join(aliases.get(item) or item for item in dict.fromkeys(scope))
+            started = "已为指定成员开启临时全量模式" if delegated else "已开启临时全量模式"
+            return f"{started}，有效期从现在起 2 小时。\n转发范围：{label}（自动跳过发言所在群）"
+        finally:
+            if updates.get(member) is request:
+                del updates[member]
+
+    def active_cross_group_mode(self, member):
+        member = member.upper()
+        modes = getattr(self, "cross_group_modes", {})
+        mode = modes.get(member)
+        if mode and mode[0] > time.monotonic():
+            return mode
+        modes.pop(member, None)
+
+    async def forward_cross_group(self, message, text, targets, *, quiet=False, attachments=()):
+        group = message.group_openid
+        outbound = self.cross_group_outbound()
+        destinations = [target for target in dict.fromkeys(targets) if target != group and target in outbound]
+        if not destinations:
+            return "当前范围内没有可转发的其他授权群。"
+        text = text.replace("\r\n", "\n")
+        if len(text) > 2000 or any(ord(char) < 32 and char not in "\t\n" for char in text):
+            return "消息过长或含有控制字符（最多 2000 字符）。"
+        aliases = self.settings.get("chat_bridge", {}).get("group_aliases", {})
+        source = aliases.get(group) or await self.group_name(group) or group
+        author = message.author
+        sender = getattr(author, "nickname", None) or getattr(author, "username", None) or author.member_openid
+        sender = re.sub(r"[\x00-\x1f]", "", str(sender))[:64]
+        content = f"【跨群信息｜{source}】{sender}：{text}"
+        if len(content) > 2000:
+            return "消息含来源标记后超过 2000 字符，请缩短内容。"
+        failed = []
+        for destination in destinations:
+            try:
+                if text:
+                    result = await self.send_group_text(destination, content, translate=False)
+                    for receipt in result if isinstance(result, list) else (result,):
+                        self.remember_cross_group_receipt(receipt, destination, group)
+                for file_type, url in attachments:
+                    uploaded = await self.api.post_group_file(group_openid=destination, file_type=file_type, url=url)
+                    receipt = await self.api.post_group_message(
+                        group_openid=destination, msg_type=7, content=content if not text else "",
+                        media={"file_info": uploaded["file_info"]},
+                    )
+                    self.remember_cross_group_receipt(receipt, destination, group)
+            except Exception:
+                log.exception("Cross-group delivery failed for %s", destination)
+                failed.append(aliases.get(destination) or destination)
+        sent = len(destinations) - len(failed)
+        if failed:
+            return f"已发送到 {sent}/{len(destinations)} 个群。\n发送失败：{'、'.join(failed)}"
+        if not quiet:
+            return f"已发送到 {sent} 个群。"
+
+    @staticmethod
+    def cross_group_attachments(message):
+        raw = getattr(message, "raw_data", None) or {}
+        files = []
+        for item in (raw.get("attachments") or [])[:media.MAX_ITEMS]:
+            if not isinstance(item, dict):
+                continue
+            mime = str(item.get("content_type", "")).lower().partition("/")[0]
+            file_type = {"image": 1, "video": 2, "audio": 3}.get(mime)
+            try:
+                url = media.qq_url(item.get("url"))
+            except ValueError:
+                continue
+            if file_type:
+                files.append((file_type, url))
+        return files
+
+    def remember_cross_group_receipt(self, receipt, destination, source):
+        if not isinstance(receipt, dict):
+            return
+        refs = getattr(self, "cross_group_receipts", None)
+        if refs is None:
+            self.cross_group_receipts = refs = OrderedDict()
+        ext = receipt.get("ext_info")
+        if not isinstance(ext, dict):
+            ext = {}
+        for key in (receipt.get("id"), ext.get("ref_idx")):
+            if isinstance(key, str) and key:
+                refs[destination, key] = source
+        while len(refs) > 8192:
+            refs.popitem(last=False)
+
+    def cross_group_reply_source(self, message):
+        raw = getattr(message, "raw_data", None) or {}
+        scene = raw.get("message_scene") or {}
+        reference = raw.get("message_reference") or {}
+        indices = [reference.get("message_id")]
+        indices.extend(part.partition("=")[2] for part in scene.get("ext") or []
+                       if isinstance(part, str) and part.startswith("ref_msg_idx="))
+        refs = getattr(self, "cross_group_receipts", {})
+        for index in indices:
+            if isinstance(index, str) and (source := refs.get((message.group_openid, index))):
+                return source
+
+    async def match_cross_groups(self, requested):
+        outbound = self.cross_group_outbound()
+        if requested in outbound:
+            return [requested]
         aliases = self.settings.get("chat_bridge", {}).get("group_aliases", {})
         matches = []
         for group in outbound:
-            if requested == group or requested == aliases.get(group) or requested == await self.group_name(group):
+            if requested == aliases.get(group) or requested == await self.group_name(group):
                 matches.append(group)
-        return matches[0] if len(matches) == 1 else None
+        return list(dict.fromkeys(matches))
 
     async def on_group_at_message_create(self, message):
         await self.on_group_message_create(message, explicit_at=True)
@@ -745,8 +901,9 @@ class QQBot(botpy.Client):
         if already_seen and not explicit_at:
             return
         text = re.sub(r"^<@!?[^>]+>\s*", "", raw_text).strip()
+        raw = getattr(message, "raw_data", None) or {}
         # Commands remain available when QQ switches @ events to full-message events.
-        if not text and not getattr(message, "attachments", None) and not ((getattr(message, "raw_data", None) or {}).get("msg_elements")):
+        if not (text or getattr(message, "attachments", None) or raw.get("attachments") or raw.get("msg_elements")):
             return
         group = str(getattr(message, "group_openid", "") or "")
         member = str(getattr(getattr(message, "author", None), "member_openid", "") or "")
@@ -767,6 +924,42 @@ class QQBot(botpy.Client):
                     await group_ai.capture(message, group, member, raw_text, created=min(stamp, received).timestamp())
                 except Exception as error:
                     log.warning("Group message could not be cached (%s)", type(error).__name__)
+        if member and group in authorized and group in allowed and not CROSS_GROUP_COMMAND.match(text):
+            source = self.cross_group_reply_source(message)
+            mode = self.active_cross_group_mode(member)
+            if source or mode:
+                if not already_seen:
+                    if source:
+                        targets = [source]
+                    else:
+                        targets = self.cross_group_outbound() if mode[1] is None else mode[1]
+                    attachments = self.cross_group_attachments(message)
+                    if text or attachments:
+                        result = await self.forward_cross_group(message, text, targets, quiet=True, attachments=attachments)
+                    else:
+                        result = "这条消息没有可转发的正文或受支持的附件。"
+                    if result:
+                        await self.reply_group_text(message, result, translate=False)
+                return
+        shortcut = None
+        group_intel = re.fullmatch(r"/群情报(?:\s+([\s\S]+))?", text)
+        if group_intel:
+            argument = group_intel.group(1)
+            if argument is None:
+                shortcut = "/群情报 今日"
+            elif (re.fullmatch(r"(?:<@!?[0-9a-f]{32}>|@[^@<>\r\n]+)", argument, re.I)
+                  and mentioned_member(message, argument)):
+                shortcut = f"/群情报 成员 {argument}"
+        if shortcut:
+            if already_seen or group not in authorized or group not in allowed or not member:
+                return
+            try:
+                await self.reply_group_text(
+                    message, f"⚠️ 这是非标准用法，建议使用：{shortcut}", translate=False, sequence=3,
+                )
+            except Exception:
+                log.warning("Group intelligence shortcut notice could not be sent")
+            text = shortcut
         if text.startswith("/"):
             try:
                 text = expand_command_group(text)
@@ -886,10 +1079,11 @@ class QQBot(botpy.Client):
             if result is not True:
                 await self.send_group_text(group, "没有展开权限，或内容已过期。", msg_id=message.id)
             return
-        if re.match(r"^/(?:服务器|在线|状态情报|设置头衔|清除头衔|设bot管理|取缔bot管理|绑定Java|绑定基岩|关联基岩|我的绑定|换绑Java|换绑基岩|解绑|解除关联|帮助|help|本群ID|群服互通|跨群信息|大发命令|发命令|绑定|换绑|引导验证)(?:\s|$)", text, re.I):
+        if re.match(r"^/(?:服务器|在线|伺服器情报|状态情报|设置头衔|清除头衔|设bot管理|取缔bot管理|取消bot管理|绑定Java|绑定基岩|关联基岩|我的绑定|换绑Java|换绑基岩|解绑|解除关联|帮助|help|本群ID|群服互通|跨群信息|大发命令|发命令|绑定|换绑|引导验证)(?:\s|$)", text, re.I):
             answer = await self.group_response(message)
             preserve_output = re.match(r"^/(?:大发命令|发命令|跨群信息)\s", text)
-            await self.reply_group_text(message, answer, translate=not bool(preserve_output))
+            if answer:
+                await self.reply_group_text(message, answer, translate=not bool(preserve_output))
         else:
             await self.relay_group(message)
 
