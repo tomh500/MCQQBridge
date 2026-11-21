@@ -11,7 +11,7 @@ from types import SimpleNamespace
 import tempfile
 import time
 import unittest
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 import uuid
 
 import aiohttp
@@ -140,6 +140,18 @@ class StatusContractTests(unittest.IsolatedAsyncioTestCase):
                     self.assertIn("未知", message.reply.call_args.kwargs["content"])
                 else:
                     message.reply.assert_not_awaited()
+
+    async def test_server_intelligence_includes_host_metrics_and_only_smp_player_count(self):
+        self.assertEqual((await self.report()).status, 200)
+        self.assertEqual((await self.report(server_id="lobby", online_players=9)).status, 200)
+        bot = self.bot()
+        message = self.message("/伺服器情报")
+        with patch("mcqq.system_info.read_system_info", return_value="【机器状态情报】\n系统：Ubuntu"), \
+             patch("mcqq.system_info.read_extra_metrics", return_value="CPU 占用率：25.0%\n硬碟剩余空间：20.0/50.0 GiB"):
+            await bot.on_group_message_create(message)
+        self.assertEqual(message.reply.await_args.kwargs["content"],
+                         "【机器状态情报】\n系统：Ubuntu\nCPU 占用率：25.0%\n"
+                         "硬碟剩余空间：20.0/50.0 GiB\nSMP 在线人数：3/50 人")
 
     async def test_missing_snapshots_and_offline_are_distinct(self):
         missing = self.item(await self.read())

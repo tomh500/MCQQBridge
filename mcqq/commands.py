@@ -16,7 +16,7 @@ HELP = """【SMP 入服与账户】
 /SMP头衔 清除 或 /清除头衔 —— 恢复默认身份标签
 设置和清除共用冷却时间，普通群员 1 小时，群主和管理员 30 秒。
 /服状态 在线 或 /在线、/服务器 —— 查看各服在线人数
-/服状态 系统 或 /状态情报 —— 查看服务器系统、运行时长与内存
+/伺服器情报 或 /服状态 系统、/状态情报 —— 查看系统、内存、CPU、硬碟空间及 SMP 在线人数
 /群服互通 —— 查看 QQ 与游戏的互通方式
 
 【群情报与跨群】
@@ -53,7 +53,7 @@ COMMANDS = (
     ("帮助", "查看完整命令和用法"),
     ("跨群信息", "跨群转发及临时全量模式"),
     ("发命令", "以绑定玩家身份执行游戏指令"),
-    ("状态情报", "查看机器系统、时长和内存"),
+    ("伺服器情报", "查看主机资源和SMP在线人数"),
     ("今日老婆", "每日抽一位，可换一次"),
 )
 
@@ -116,9 +116,9 @@ def parse(text):
         if not argument:
             raise ValueError(f"格式：/{command} @成员")
         return ("admin_add" if command == "设bot管理" else "admin_remove"), None, argument
-    if command == "状态情报":
+    if command in ("伺服器情报", "状态情报"):
         if text[len(command):].strip():
-            raise ValueError("格式：/状态情报")
+            raise ValueError(f"格式：/{command}")
         return "system_info", None, None
     if command in ("发命令", "大发命令"):
         argument = text[len(command):].strip().split(maxsplit=1)

@@ -52,7 +52,21 @@ def format_status(data):
     return "\n".join(lines)
 
 
-async def reply(bot, message):
+def format_smp_online(data):
+    format_status(data)
+    servers = {item["server_id"].casefold(): item for item in data["servers"]}
+    smp = servers.get("survival") or servers.get("smp")
+    if not smp or smp["freshness"] in ("missing", "expired"):
+        return "未知（暂无有效快照）"
+    snapshot = smp["snapshot"]
+    count = (f"{snapshot['online_players']}/{snapshot['max_players']} 人"
+             if snapshot["availability"] == "online" else "0 人（离线）")
+    if smp["freshness"] == "stale":
+        return f"最后观测 {count}（{int(smp['age_seconds'])} 秒前）"
+    return count
+
+
+async def reply(bot, message, *, formatter=format_status):
     now = time.monotonic()
     limits = getattr(bot, "status_limits", None)
     if limits is None:
@@ -74,6 +88,6 @@ async def reply(bot, message):
             return "状态查询过于频繁，请稍后重试。"
         if data.get("code") == "disabled":
             return "服务器状态查询尚未启用。"
-        return format_status(data)
+        return formatter(data)
     except (aiohttp.ClientError, asyncio.TimeoutError, ValueError, KeyError, TypeError, OverflowError):
         return "状态服务暂时不可用，请稍后重试。"

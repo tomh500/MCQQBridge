@@ -361,6 +361,27 @@ class ChatTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(format_system_info('Ubuntu 26.04', '6.8', 90000, 8*1048576, 3*1048576),
                          '【机器状态情报】\n系统：Ubuntu 26.04\n内核：6.8\n已运行：1天1小时\n内存：5.0/8.0 GiB（62%）')
 
+    async def test_group_intelligence_shortcuts_warn_and_use_normal_handlers(self):
+        bot = self.cross_group_bot()
+        bot.daily_reports = SimpleNamespace()
+        bot.group_ai = SimpleNamespace(capture=AsyncMock())
+        bot.manual_group_report = AsyncMock()
+        bot.run_group_plugin = AsyncMock()
+        mention = "<@!" + "A" * 32 + ">"
+        star = self.cross_group_message("star", "/群情报")
+        profile = self.cross_group_message("profile", "/群情报 " + mention)
+
+        await bot.on_group_message_create(star)
+        await bot.on_group_at_message_create(star)
+        await bot.on_group_message_create(profile)
+        bot.manual_group_report.assert_awaited_once()
+        self.assertEqual(bot.manual_group_report.await_args.args[0], star)
+        bot.run_group_plugin.assert_awaited_once()
+        self.assertEqual(bot.run_group_plugin.await_args.args[1:3], (mention, profile))
+        self.assertEqual([call.args[1] for call in bot.reply_group_text.await_args_list],
+                         ["⚠️ 这是非标准用法，建议使用：/群情报 今日",
+                          "⚠️ 这是非标准用法，建议使用：/群情报 成员 " + mention])
+
     async def test_console_said_uses_console_identity(self):
         response = await self.post('from-game', dict(source='console', server='survival', event_id='console1',
                                                      text='hello  @a !'), True)

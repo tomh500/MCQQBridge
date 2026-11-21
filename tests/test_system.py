@@ -269,7 +269,7 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
         self.assertLessEqual(len(panel["items"]), 20)
         self.assertEqual([item["name"] for item in panel["items"]],
                          ["SMP头衔", "群讯息情报统计", "群友情报", "SMP账号", "帮助",
-                          "跨群信息", "发命令", "状态情报", "今日老婆"])
+                          "跨群信息", "发命令", "伺服器情报", "今日老婆"])
         self.assertEqual(display_width("本群ID"), 6)
         for item in panel["items"]:
             self.assertLessEqual(display_width(item["name"]), 14)
@@ -290,6 +290,7 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
             ("/SMP头衔 设置 测试头衔", "/设置头衔 测试头衔"),
             ("/SMP头衔 清除", "/清除头衔"),
             ("/服状态 系统", "/状态情报"),
+            ("/伺服器情报", "/服状态 系统"),
             ("/服状态 在线", "/在线"),
         )
         for grouped, standalone in paired_commands:

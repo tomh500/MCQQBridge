@@ -464,10 +464,20 @@ class QQBot(botpy.Client):
         if group not in self.settings.get("allowed_groups", []):
             return "本群尚未开放绑定，请让服主配置 /本群ID 返回的标识。"
         if action == "system_info":
-            try:
-                return await asyncio.to_thread(system_info.read_system_info)
-            except (OSError, ValueError, KeyError):
-                return "机器状态暂时无法读取。"
+            host, metrics, smp = await asyncio.gather(
+                asyncio.to_thread(system_info.read_system_info),
+                asyncio.to_thread(system_info.read_extra_metrics),
+                status_bot.reply(self, message, formatter=status_bot.format_smp_online)
+                if member and getattr(message, "id", None) else asyncio.sleep(0, result="缺少 QQ 官方身份凭证。"),
+                return_exceptions=True,
+            )
+            if isinstance(host, Exception):
+                host = "机器状态暂时无法读取。"
+            if isinstance(metrics, Exception):
+                metrics = "CPU 和硬碟状态暂时无法读取。"
+            if isinstance(smp, Exception):
+                smp = "状态服务暂时不可用。"
+            return f"{host}\n{metrics}\nSMP 在线人数：{smp}"
         if action in ("admin_add", "admin_remove"):
             if not member or not getattr(message, "id", None):
                 return "缺少 QQ 官方身份凭证。"
@@ -913,6 +923,25 @@ class QQBot(botpy.Client):
                     if result:
                         await self.reply_group_text(message, result, translate=False)
                 return
+        shortcut = None
+        group_intel = re.fullmatch(r"/群情报(?:\s+([\s\S]+))?", text)
+        if group_intel:
+            argument = group_intel.group(1)
+            if argument is None:
+                shortcut = "/群情报 今日"
+            elif (re.fullmatch(r"(?:<@!?[0-9a-f]{32}>|@[^@<>\r\n]+)", argument, re.I)
+                  and mentioned_member(message, argument)):
+                shortcut = f"/群情报 成员 {argument}"
+        if shortcut:
+            if already_seen or group not in authorized or group not in allowed or not member:
+                return
+            try:
+                await self.reply_group_text(
+                    message, f"⚠️ 这是非标准用法，建议使用：{shortcut}", translate=False, sequence=3,
+                )
+            except Exception:
+                log.warning("Group intelligence shortcut notice could not be sent")
+            text = shortcut
         if text.startswith("/"):
             try:
                 text = expand_command_group(text)
@@ -1032,7 +1061,7 @@ class QQBot(botpy.Client):
             if result is not True:
                 await self.send_group_text(group, "没有展开权限，或内容已过期。", msg_id=message.id)
             return
-        if re.match(r"^/(?:服务器|在线|状态情报|设置头衔|清除头衔|设bot管理|取缔bot管理|取消bot管理|绑定Java|绑定基岩|关联基岩|我的绑定|换绑Java|换绑基岩|解绑|解除关联|帮助|help|本群ID|群服互通|跨群信息|大发命令|发命令|绑定|换绑|引导验证)(?:\s|$)", text, re.I):
+        if re.match(r"^/(?:服务器|在线|伺服器情报|状态情报|设置头衔|清除头衔|设bot管理|取缔bot管理|取消bot管理|绑定Java|绑定基岩|关联基岩|我的绑定|换绑Java|换绑基岩|解绑|解除关联|帮助|help|本群ID|群服互通|跨群信息|大发命令|发命令|绑定|换绑|引导验证)(?:\s|$)", text, re.I):
             answer = await self.group_response(message)
             preserve_output = re.match(r"^/(?:大发命令|发命令|跨群信息)\s", text)
             if answer:
