@@ -60,7 +60,13 @@ QQ 开放平台 / QQ 群
 
 `/said 内容` 向出站列表中的群发送，并在允许的游戏子服广播。子服配置 `group-commands: {friends: "OPENID_A"}` 后，`/friends 内容` 只发送到目标群，同时在游戏内广播；重启生效。命令不能覆盖已有命令，权限为 mcqq.said。目标群需在授权及出站列表中。重复空格和标点保留，命令文本不会作为服务端命令执行。
 
-子服控制台也可使用 `/said 内容` 和 `group-commands` 中的自定义命令，以 Console 身份向游戏和 QQ 发言。需在子服 `remote` 配置本地 API 地址、与代理相同的 `proxy-token`、代理中的真实 `server-name`。机器人 `/跨群信息` 查询可用目标及 group_openid；`/跨群信息 [群名/别名] 内容` 定向发送，单词别名可省略方括号；`/跨群信息 ALL 内容` 广播到所有允许出站的群，包含来源群。机器人发送格式为 `【跨群信息｜来源群】发送者：内容`。
+子服控制台也可使用 `/said 内容` 和 `group-commands` 中的自定义命令，以 Console 身份向游戏和 QQ 发言。需在子服 `remote` 配置本地 API 地址、与代理相同的 `proxy-token`、代理中的真实 `server-name`。
+
+- `/跨群信息` 查询目标群和 group_openid。`/跨群信息 [群名/别名] 内容` 定向发送，单词别名或 ID 可省略方括号。
+- `/跨群信息 ALL 内容` 广播到允许出站的其他群。省略目标时也按 ALL 发送，并在回执中提示如何指定目标。
+- 在 QQ 中引用回复 Bot 转发的跨群消息，可把回复直接发回原来源群。
+- `/跨群信息 临时全量模式 一群,二群,MC群` 在接下来 2 小时内自动转发当前发言者的消息，目标以英文逗号分隔，支持别名和 ID。省略范围时为 ALL，自动跳过发言所在群。重复执行会替换范围，并从执行时起重新计时 2 小时。自动转发仅在失败时回报。
+- `/跨群信息 结束全量模式` 立即关闭自己的全量模式。Bot 重启会清除临时模式及跨群消息的引用索引。
 
 `/发命令 lobby|survival|proxy|ALL /指令 参数` 以已绑定玩家身份执行；子服离线时使用受限模拟 Player，proxy 仅支持在线玩家。`/大发命令 lobby|survival|proxy|ALL /指令 参数` 以目标进程 Console 身份执行，不要求绑定游戏账号。目标由 `chat_bridge.command_targets` 显式开放，`ALL` 对列表中每个目标各执行一次。`bot_roles.owners` 填 QQ 官方 member_openid；只有主人和管理可用 `/大发命令`，管理只能指定单个子服，proxy 与 ALL 仅限主人。主人用 `/设bot管理 @成员` 和 `/取缔bot管理 @成员` 即时调整管理名单；名单存于机器人数据库，不需重启。API 服务端核验身份和权限并记录审计；子服需启用 `remote.poll-commands`。远程配置含密钥，勿提交仓库。
 
@@ -73,6 +79,8 @@ QQ 开放平台 / QQ 群
 `storage.type` 可选 yaml（默认）、sql、mongodb。SQL URL 留空使用本地 SQLite；也可填写 jdbc:mysql://host/database 或 jdbc:postgresql://host/database，用户名和密码单独配置。MongoDB 填写 storage.mongodb.uri 和 database。SQL 使用 mcqq_settings 表，MongoDB 使用 settings 集合，YAML 使用插件目录 data.yml。切换后端不会自动搬迁已有数据。机器人绑定与队列仍由机器人 SQLite 管理，代理玩家聊天偏好保存在代理目录；Spigot 数据接口不替代这些数据源。
 
 默认配置从 JAR 生成至用户插件目录，不覆盖已存在配置；词库首次复制至代理数据目录，服主可修改，并通过重载生效。word-filter.enabled 控制过滤，red/yellow 提供额外正则。修改后应自行验证规则性能。
+
+QQ 面板将入服账户与头衔分别收在 `/SMP账号` 和 `/SMP头衔`。群情报与系统状态使用独立入口 `/群讯息情报统计`、`/群友情报` 和 `/状态情报`。两套写法都可手动输入，`/帮助` 有对应示例。`/大发命令`、`/设bot管理`、`/取消bot管理` 和 `/取缔bot管理` 通过手动输入使用。
 
 修改 `mcqq/commands.py` 的 `COMMANDS` 后，发布时还必须在云端机器人运行目录执行 `.venv/bin/python sync_commands.py`，将命令同步到 QQ 官方 `/` 面板。脚本会回读并核对名称与描述；仅更新 Python 文件或重启 Bot 不会更新面板。
 
