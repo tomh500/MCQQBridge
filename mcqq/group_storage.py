@@ -4,7 +4,6 @@ import json
 import logging
 import re
 import time
-from datetime import datetime, timedelta, timezone
 
 import pymongo
 import pymysql
@@ -110,9 +109,8 @@ class ExternalHistory:
         if self.raw is None and self.raw_sql is None and self.report_store is self.local:
             return self.local.add(event_id, group, member, text, image_path, display_name, created, avatar_url)
         created = time.time() if created is None else created
-        day = datetime.fromtimestamp(created, timezone(timedelta(hours=8))).date().isoformat()
         with self.local.image_lock:
-            if self.report_store.closed_day(group, day):
+            if self.report_store.message_archived(group, created):
                 return
             if self.raw_sql is not None:
                 return self.raw_sql.add(event_id, group, member, text, image_path, display_name[:80], created, avatar_url)
@@ -167,7 +165,7 @@ class ExternalHistory:
             if not self.report_store.closed_day(group, day):
                 if summary:
                     self.save_summaries(group, [("", summary)])
-                self.report_store.store_report(group, day, images)
+                self.report_store.store_report(group, day, images, cutoff=cutoff)
             self.catchup_group(group, cutoff)
 
     def catchup_group(self, group, cutoff):

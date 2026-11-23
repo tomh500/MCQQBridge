@@ -82,6 +82,17 @@ class GroupStorageMySQLTests(unittest.TestCase):
         self.assertIsNone(h.mongo)
         self.assertIsNone(h.cache)
 
+    def test_non_midnight_cutoff_accepts_new_messages_on_the_same_day(self):
+        h, group = self.history, self.group
+        start = midnight(datetime.now(BEIJING))
+        cutoff = (start + timedelta(hours=23, minutes=50)).timestamp()
+        h.stage_day(group, start.date().isoformat(), cutoff, "", [b"report"])
+        h.add(group + "_late", group, "member", "Late", created=cutoff - 1)
+        h.add(group + "_at", group, "member", "At cutoff", created=cutoff)
+        h.add(group + "_after", group, "member", "After cutoff", created=cutoff + 1)
+        self.assertEqual([row[3] for row in h.day(group, cutoff - 2, cutoff + 2)],
+                         ["At cutoff", "After cutoff"])
+
     def test_sqlite_migration_verifies_each_durable_role_and_can_repeat(self):
         path = self.path / "source.db"
         source = History(str(path), self.path / "group-ai-images")

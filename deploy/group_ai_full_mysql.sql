@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS mcqq_group_ai_profile (
 CREATE TABLE IF NOT EXISTS mcqq_group_ai_daily (
     group_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
     day CHAR(10) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    cutoff DOUBLE NULL,
     PRIMARY KEY (group_id, day),
     KEY mcqq_group_ai_daily_day (day)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
