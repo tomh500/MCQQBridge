@@ -162,7 +162,7 @@ group_ai_storage:
 
 升级先备份并正常停止服务器，删除旧 qq-whitelist 和 mcqq-said JAR，放入新 JAR。代理首次启动自动复制 QQWhitelist 数据目录到 MCQQBridge；旧目录保留备份。子服旧 MCQQSaid 配置需要复制到 MCQQSpigot。切勿同时加载新旧插件。保留机器人 settings.json、bridge.json、数据库和服务器上的签名密钥。
 
-本项目提供源码和构建包；对外发布前应遵循所含第三方库和词库的许可。测试命令：`python -m unittest discover -s tests`，代理真实启动测试为 `python tests/proxy_smoke.py`。
+安装 `requirements.txt` 后，在仓库根目录运行 `python -m unittest discover -s tests`。涉及 MySQL 的用例需要显式配置一次性测试数据库。
 
 ## 独立 Python 发布包
 
