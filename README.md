@@ -158,7 +158,7 @@ group_ai_storage:
 
 ## 构建与升级
 
-代理运行 plugin/build.ps1；子服使用 Maven 3.9+ 执行 `mvn -f spigot/pom.xml package`，数据库驱动随子服 JAR 打包。源码构建需要服务器根目录 core 下的 BungeeCord.jar、spigot-1.12.2.jar 和 proxy 下的 BungeeChat JAR；Maven 可用 `-Dmcserver.root=绝对路径` 指定服务器根目录。输出分别为 mcqq-bridge-2.0.0.jar、mcqq-spigot-2.0.0.jar。
+从仓库根目录运行 `pwsh -File plugin/build.ps1 -BungeeJar /path/to/BungeeCord.jar -ChatJar /path/to/BungeeChat.jar` 构建代理插件。子服使用 Maven 3.9+，执行 `mvn -f spigot/pom.xml "-Dmcserver.root=/path/to/server-root" package`。该目录的 `core/` 中需要 `spigot-1.12.2.jar`，数据库驱动随子服 JAR 打包。构建产物分别位于 `plugin/target/` 和 `spigot/target/`。
 
 升级先备份并正常停止服务器，删除旧 qq-whitelist 和 mcqq-said JAR，放入新 JAR。代理首次启动自动复制 QQWhitelist 数据目录到 MCQQBridge；旧目录保留备份。子服旧 MCQQSaid 配置需要复制到 MCQQSpigot。切勿同时加载新旧插件。保留机器人 settings.json、bridge.json、数据库和服务器上的签名密钥。
 
