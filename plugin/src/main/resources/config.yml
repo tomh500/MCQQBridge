@@ -31,6 +31,8 @@ chat-bridge:
   # 填代理 config.yml 中真实的子服键名。只有这些子服参与互通。/ Exact backend keys from proxy config.yml.
   # 例如 / Example: [lobby, survival]
   servers: []
+  # Backends that check BedWars arena membership before displaying bridge messages.
+  bedwars-lobby-servers: []
   # 可选：数字QQ号 -> 官方 member_openid；仅用于下面的兼容头衔映射。
   # Optional numeric QQ -> member_openid mapping, used only for legacy title lookup below.
   # 例 / Example: {'123456789': 'MEMBER_OPENID'}；所有ID建议加引号。/ Quote all IDs.

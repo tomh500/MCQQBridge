@@ -45,28 +45,31 @@ def plain_game_output(value):
     return re.sub(r"§[0-9a-fk-orx]", "", value, flags=re.IGNORECASE)
 
 
-def mentioned_member(message, argument):
-    """Use the QQ mention's official member ID, never a display name."""
-    match = re.fullmatch(r"(?:<@!?|@)([A-Fa-f0-9]{32})>?", argument.strip())
-    if match:
-        return match.group(1).upper()
+def group_mention_fields(message):
     raw = getattr(message, "raw_data", None) or {}
     if not isinstance(raw, dict):
-        return None
+        return
     known_mentions = raw.get("mentions") or []
     mentions = list(known_mentions) + list(raw.get("msg_elements") or [])
-    found = set()
     for element in mentions:
         if not isinstance(element, dict):
             continue
         if element.get("type") not in ("at", "mention", "AT") and element not in known_mentions:
             continue
-        for value in (element, element.get("data"), element.get("at"), element.get("mention")):
+        for value in (element.get("data"), element.get("at"), element.get("mention"), element):
             if isinstance(value, dict):
                 for key in ("member_openid", "target_member_openid", "openid", "target"):
                     candidate = value.get(key)
                     if isinstance(candidate, str) and re.fullmatch(r"[A-Fa-f0-9]{32}", candidate):
-                        found.add(candidate.upper())
+                        yield candidate.upper(), value
+
+
+def mentioned_member(message, argument):
+    """Use the QQ mention's official member ID, never a display name."""
+    match = re.fullmatch(r"(?:<@!?|@)([A-Fa-f0-9]{32})>?", argument.strip())
+    if match:
+        return match.group(1).upper()
+    found = {member for member, _ in group_mention_fields(message)}
     return next(iter(found)) if len(found) == 1 and argument.strip().startswith("@") else None
 
 
@@ -656,6 +659,7 @@ class QQBot(botpy.Client):
         response = await self.forward_cross_group(
             message, content, [destination] if destination else outbound,
             quiet=self.active_cross_group_mode(member) is not None,
+            attachments=self.cross_group_attachments(message),
         )
         if implicit_all:
             warning = "⚠️ 未指定目标群，已按 ALL 处理。建议用 /跨群信息 群别名 信息 指定目标。"
@@ -698,13 +702,45 @@ class QQBot(botpy.Client):
             return mode
         modes.pop(member, None)
 
+    def cross_group_destinations(self, group, targets):
+        outbound = self.cross_group_outbound()
+        return [target for target in dict.fromkeys(targets) if target != group and target in outbound]
+
+    async def cross_group_text(self, message, text):
+        text = "[表情包]" if media.face_payload(text) else media.FACE_TOKEN.sub("[表情包]", text)
+        mentions = dict.fromkeys(member.upper() for member in GROUP_MENTION.findall(text))
+        if not mentions:
+            return text
+
+        names = {}
+        for member, fields in group_mention_fields(message):
+            name = fields.get("member_nickname") or fields.get("nickname") or fields.get("username")
+            if member in mentions and isinstance(name, str) and name.strip():
+                names.setdefault(member, name)
+        history = getattr(getattr(self, "group_ai", None), "history", None)
+        if history is not None:
+            for member in mentions.keys() - names.keys():
+                try:
+                    names[member] = (
+                        await asyncio.to_thread(history.profile_name, message.group_openid, member)
+                        or await asyncio.to_thread(history.profile_name, message.group_openid, member.lower())
+                    )
+                except Exception as error:
+                    log.warning("Cross-group mention lookup failed (%s)", type(error).__name__)
+
+        def replace_mention(match):
+            name = names.get(match.group(1).upper()) or ""
+            name = re.sub(r"[\x00-\x1f\x7f<>\[\]]", "", name).strip()[:64]
+            return f"[tag {name or '未知群成员'}]"
+
+        return GROUP_MENTION.sub(replace_mention, text)
+
     async def forward_cross_group(self, message, text, targets, *, quiet=False, attachments=()):
         group = message.group_openid
-        outbound = self.cross_group_outbound()
-        destinations = [target for target in dict.fromkeys(targets) if target != group and target in outbound]
+        destinations = self.cross_group_destinations(group, targets)
         if not destinations:
             return "当前范围内没有可转发的其他授权群。"
-        text = text.replace("\r\n", "\n")
+        text = await self.cross_group_text(message, text.replace("\r\n", "\n"))
         if len(text) > 2000 or any(ord(char) < 32 and char not in "\t\n" for char in text):
             return "消息过长或含有控制字符（最多 2000 字符）。"
         aliases = self.settings.get("chat_bridge", {}).get("group_aliases", {})
@@ -715,17 +751,19 @@ class QQBot(botpy.Client):
         content = f"【跨群信息｜{source}】{sender}：{text}"
         if len(content) > 2000:
             return "消息含来源标记后超过 2000 字符，请缩短内容。"
+        caption = bool(attachments and (not text or (attachments[0][0] == 1 and len(content) <= 1700)))
         failed = []
         for destination in destinations:
             try:
-                if text:
+                if text and not caption:
                     result = await self.send_group_text(destination, content, translate=False)
                     for receipt in result if isinstance(result, list) else (result,):
                         self.remember_cross_group_receipt(receipt, destination, group)
-                for file_type, url in attachments:
+                for index, (file_type, url) in enumerate(attachments):
                     uploaded = await self.api.post_group_file(group_openid=destination, file_type=file_type, url=url)
                     receipt = await self.api.post_group_message(
-                        group_openid=destination, msg_type=7, content=content if not text else "",
+                        group_openid=destination, msg_type=7,
+                        content=plain_game_output(content) if caption and index == 0 else "",
                         media={"file_info": uploaded["file_info"]},
                     )
                     self.remember_cross_group_receipt(receipt, destination, group)
@@ -903,7 +941,9 @@ class QQBot(botpy.Client):
         text = re.sub(r"^<@!?[^>]+>\s*", "", raw_text).strip()
         raw = getattr(message, "raw_data", None) or {}
         # Commands remain available when QQ switches @ events to full-message events.
-        if not (text or getattr(message, "attachments", None) or raw.get("attachments") or raw.get("msg_elements")):
+        has_content = text or getattr(message, "attachments", None) or raw.get("attachments") or raw.get("msg_elements")
+        leading_mention = GROUP_MENTION.fullmatch(raw_text.strip())
+        if not (has_content or leading_mention):
             return
         group = str(getattr(message, "group_openid", "") or "")
         member = str(getattr(getattr(message, "author", None), "member_openid", "") or "")
@@ -927,20 +967,27 @@ class QQBot(botpy.Client):
         if member and group in authorized and group in allowed and not CROSS_GROUP_COMMAND.match(text):
             source = self.cross_group_reply_source(message)
             mode = self.active_cross_group_mode(member)
-            if source or mode:
+            targets = [source] if source else (
+                (self.cross_group_outbound() if mode[1] is None else mode[1]) if mode else []
+            )
+            if source or self.cross_group_destinations(group, targets):
                 if not already_seen:
-                    if source:
-                        targets = [source]
-                    else:
-                        targets = self.cross_group_outbound() if mode[1] is None else mode[1]
                     attachments = self.cross_group_attachments(message)
-                    if text or attachments:
-                        result = await self.forward_cross_group(message, text, targets, quiet=True, attachments=attachments)
+                    forward_text = raw_text.strip()
+                    leading = GROUP_MENTION.match(forward_text)
+                    if leading and leading.group(1).casefold() == mention_openid:
+                        forward_text = forward_text[leading.end():].lstrip()
+                    if forward_text or attachments:
+                        result = await self.forward_cross_group(
+                            message, forward_text, targets, quiet=True, attachments=attachments,
+                        )
                     else:
                         result = "这条消息没有可转发的正文或受支持的附件。"
                     if result:
                         await self.reply_group_text(message, result, translate=False)
                 return
+        if not has_content:
+            return
         shortcut = None
         group_intel = re.fullmatch(r"/群情报(?:\s+([\s\S]+))?", text)
         if group_intel:

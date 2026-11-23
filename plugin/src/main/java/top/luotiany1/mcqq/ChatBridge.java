@@ -20,6 +20,7 @@ import net.md_5.bungee.config.Configuration;
 import net.md_5.bungee.config.ConfigurationProvider;
 import net.md_5.bungee.config.YamlConfiguration;
 import net.md_5.bungee.event.EventHandler;
+import net.md_5.bungee.chat.ComponentSerializer;
 import java.io.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
@@ -31,6 +32,7 @@ import java.util.concurrent.TimeUnit;
 /** All bridge chat is rendered and routed at the proxy, never dispatched as a command. */
 public final class ChatBridge implements Listener {
     static final String CHANNEL = "mcqq:chat";
+    private static final String BEDWARS_LOBBY_CHANNEL = "mcqq:bwlobby";
     private final MCQQBridge plugin;
     private final Set<Long> delivered = new HashSet<>();
     private final Map<UUID, Long> cooldown = new HashMap<>();
@@ -47,6 +49,7 @@ public final class ChatBridge implements Listener {
     ChatBridge(MCQQBridge plugin) {
         this.plugin = plugin;
         plugin.getProxy().registerChannel(CHANNEL);
+        plugin.getProxy().registerChannel(BEDWARS_LOBBY_CHANNEL);
         plugin.getProxy().getPluginManager().registerListener(plugin, this);
         if (plugin.getProxy().getPluginManager().getPlugin("BungeeChat") != null) {
             PlaceHolderManager.registerPlaceholder(new PlaceHolder("mcqq_origin", context -> {
@@ -129,9 +132,25 @@ public final class ChatBridge implements Listener {
         return Optional.of((qq ? ChatFormat.qqPrefix(role, title, qqGroup.get()) + " " : "") + "\u00a7f" + literal(name) + "\u00a77: \u00a7f" + literal(text));
     }
 
-    private void broadcast(String text) {
-        // BungeeChat's multicast sender, with an explicit server predicate: no global leakage.
-        MessagesService.sendToMatchingPlayers(text, MessagesService.getServerPredicate(servers()));
+    private List<String> bedWarsLobbyServers() {
+        return plugin.chatConfig().getStringList("chat-bridge.bedwars-lobby-servers");
+    }
+
+    private void broadcast(String text, String locallyDeliveredServer) {
+        List<String> direct = new ArrayList<>(servers());
+        direct.removeAll(bedWarsLobbyServers());
+        if (!direct.isEmpty()) MessagesService.sendToMatchingPlayers(text, MessagesService.getServerPredicate(direct));
+        sendToBedWarsLobbies(TextComponent.fromLegacyText(text), locallyDeliveredServer);
+    }
+
+    private void sendToBedWarsLobbies(BaseComponent[] message, String locallyDeliveredServer) {
+        for (String name : bedWarsLobbyServers()) {
+            if (name.equals(locallyDeliveredServer) || !servers().contains(name)) continue;
+            net.md_5.bungee.api.config.ServerInfo server = plugin.getProxy().getServerInfo(name);
+            if (server == null || server.getPlayers().isEmpty()) continue;
+            byte[] payload = ComponentSerializer.toString(message).getBytes(StandardCharsets.UTF_8);
+            if (payload.length <= 32767) server.sendData(BEDWARS_LOBBY_CHANNEL, payload, false);
+        }
     }
 
     private BaseComponent mediaMessage(String text, JsonArray attachments) {
@@ -158,11 +177,14 @@ public final class ChatBridge implements Listener {
     }
 
     private void broadcastMedia(String text, JsonArray attachments) {
-        if (attachments.size() == 0) { broadcast(text); return; }
+        if (attachments.size() == 0) { broadcast(text, null); return; }
         BaseComponent message = mediaMessage(text, attachments);
+        List<String> direct = new ArrayList<>(servers());
+        direct.removeAll(bedWarsLobbyServers());
         for (ProxiedPlayer player : plugin.getProxy().getPlayers()) {
-            if (player.getServer() != null && servers().contains(player.getServer().getInfo().getName())) player.sendMessage(message);
+            if (player.getServer() != null && direct.contains(player.getServer().getInfo().getName())) player.sendMessage(message);
         }
+        sendToBedWarsLobbies(new BaseComponent[]{message}, null);
     }
 
     private void syncTitles(JsonArray snapshot) throws IOException {
@@ -246,12 +268,15 @@ public final class ChatBridge implements Listener {
     }
 
     @EventHandler public void said(PluginMessageEvent event) {
-        if (!event.getTag().equals(CHANNEL)) return;
+        boolean lobbyChat = event.getTag().equals(BEDWARS_LOBBY_CHANNEL);
+        if (!lobbyChat && !event.getTag().equals(CHANNEL)) return;
         event.setCancelled(true);
         if (!enabled() || !(event.getSender() instanceof Server) || !(event.getReceiver() instanceof ProxiedPlayer)) return;
         Server server = (Server) event.getSender(); ProxiedPlayer player = (ProxiedPlayer) event.getReceiver();
         // Accept server-origin data only; a client cannot impersonate another player or server.
-        if (player.getServer() != server || !servers().contains(server.getInfo().getName())) return;
+        String serverName = server.getInfo().getName();
+        if (player.getServer() != server || !servers().contains(serverName)) return;
+        if (lobbyChat && !bedWarsLobbyServers().contains(serverName)) return;
         try {
             DataInputStream in = new DataInputStream(new ByteArrayInputStream(event.getData()));
             String text = in.readUTF();
@@ -271,7 +296,7 @@ public final class ChatBridge implements Listener {
                 try {
                     Optional<String> rendered = render(player.getUniqueId().toString(), player.getName(), content, false);
                     if (!rendered.isPresent()) return;
-                    broadcast(rendered.get());
+                    broadcast(rendered.get(), lobbyChat ? serverName : null);
                     JsonObject data = new JsonObject();
                     data.addProperty("uuid", player.getUniqueId().toString()); data.addProperty("name", player.getName());
                     data.addProperty("text", content); data.addProperty("group", target); data.addProperty("server", server.getInfo().getName());
@@ -285,6 +310,10 @@ public final class ChatBridge implements Listener {
         } catch (IOException ignored) { }
     }
 
-    void close() { queue.shutdownNow(); plugin.getProxy().unregisterChannel(CHANNEL); }
+    void close() {
+        queue.shutdownNow();
+        plugin.getProxy().unregisterChannel(CHANNEL);
+        plugin.getProxy().unregisterChannel(BEDWARS_LOBBY_CHANNEL);
+    }
 }
 

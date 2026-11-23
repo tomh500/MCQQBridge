@@ -22,6 +22,7 @@ import org.bukkit.configuration.ConfigurationSection;
 public final class SaidPlugin extends JavaPlugin implements Listener {
     private Storage storage;
     private RemoteBridge remote;
+    private BedWarsLobbyChat bedWarsLobby;
     public Storage storage() { if(storage==null) throw new IllegalStateException("Storage is unavailable"); return storage; }
     @Override public void onDisable() { if(storage!=null) try { storage.close(); } catch(Exception e) { getLogger().warning("Storage shutdown failed"); } }
     private final Map<String, String> destinations = new HashMap<>();
@@ -57,6 +58,9 @@ public final class SaidPlugin extends JavaPlugin implements Listener {
             } catch (ReflectiveOperationException ex) { getLogger().warning("Unable to register " + key + ": " + ex); }
         }
         getServer().getMessenger().registerOutgoingPluginChannel(this, "mcqq:chat");
+        if (getConfig().getBoolean("features.bedwars-lobby-chat")) {
+            bedWarsLobby = new BedWarsLobbyChat(this);
+        }
         getServer().getPluginManager().registerEvents(this, this);
     }
     private void said(CommandSender sender, String text, String group) {
@@ -68,16 +72,23 @@ public final class SaidPlugin extends JavaPlugin implements Listener {
         }
         if (!(sender instanceof Player)) { remote.sendConsole(text, group, sender); return; }
         Player player = (Player) sender;
+        if (bedWarsLobby != null && !bedWarsLobby.isInLobby(player)) {
+            player.sendMessage("请回到起床战争大厅后再发送群消息。");
+            return;
+        }
         // Run normal backend chat moderation, but let the proxy own delivery and formatting.
         // Never player.chat(text): leading '/' must remain text rather than execute commands.
         AsyncPlayerChatEvent chat = new AsyncPlayerChatEvent(false, player, text, new HashSet<>(Bukkit.getOnlinePlayers()));
         Bukkit.getPluginManager().callEvent(chat);
         if (chat.isCancelled()) return;
         if (chat.getMessage().length() > 2000) { player.sendMessage("处理后的聊天文本过长。"); return; }
+        sendChat(player, chat.getMessage(), group, "mcqq:chat");
+    }
+    void sendChat(Player player, String text, String group, String channel) {
         try {
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-            DataOutputStream out = new DataOutputStream(bytes); out.writeUTF(chat.getMessage()); if (!group.isEmpty()) out.writeUTF(group);
-            player.sendPluginMessage(this, "mcqq:chat", bytes.toByteArray());
+            DataOutputStream out = new DataOutputStream(bytes); out.writeUTF(text); if (!group.isEmpty()) out.writeUTF(group);
+            player.sendPluginMessage(this, channel, bytes.toByteArray());
         } catch (IOException e) { player.sendMessage("聊天发送失败。"); }
     }
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)

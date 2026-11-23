@@ -3,13 +3,63 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
+
+from aiohttp import web
+from aiohttp.test_utils import TestServer
 
 from mcqq.group_ai import GroupAI, History
 from mcqq.bot import QQBot
 
 
 class GroupAITests(unittest.IsolatedAsyncioTestCase):
+    async def test_astrbot_group_reply_uses_isolated_sessions_and_only_sends_public_text(self):
+        requests = []
+
+        async def chat(request):
+            self.assertEqual(request.headers["Authorization"], "Bearer test-chat-key")
+            requests.append(await request.json())
+            events = [
+                {"type": "plain", "chain_type": "reasoning", "data": "内部推理"},
+                {"type": "plain", "data": "嗯，知道了。"},
+                {"type": "end"},
+            ]
+            return web.Response(text="".join(f"data: {json.dumps(event)}\n\n" for event in events),
+                                content_type="text/event-stream")
+
+        app = web.Application()
+        app.router.add_post("/api/v1/chat", chat)
+        with tempfile.TemporaryDirectory() as root:
+            root = Path(root)
+            async with TestServer(app) as server:
+                config = root / "group-ai.yml"
+                config.write_text(f"astrbot_chat:\n  base_url: {server.make_url('/')}\n"
+                                  "  key_file: .private-key\n  config_id: nina\n", encoding="utf-8")
+                (root / ".private-key").write_text("test-chat-key", encoding="utf-8")
+                ai = GroupAI({"database": str(root / "bot.db"), "group_ai_config": str(config)})
+                ai.complete = AsyncMock()
+                for group, speaker in (("group", "member"), ("group", "member"),
+                                       ("other-group", "member"), ("group", "other-member")):
+                    self.assertEqual(await ai.reply(group, "你好", speaker), "嗯，知道了。")
+                with patch.object(ai.feature_policy, "check", return_value={"allowed": False}):
+                    self.assertEqual(await ai.reply("group", "你好", "member"), "维护中暂不可用。")
+                self.assertEqual(len(requests), 4)
+                self.assertEqual(requests[0], requests[1])
+                self.assertEqual(len({request["session_id"] for request in requests}), 3)
+                self.assertEqual(requests[0]["config_id"], "nina")
+                self.assertEqual(requests[0]["message"], [{"type": "plain", "text": "你好"}])
+                self.assertEqual(ai.history.recent("group")[-1][1], "嗯，知道了。")
+                ai.history.add("old-member", "group", "other-member", "我喜欢跑步", display_name="小樱")
+                ai.history.save_summaries("group", [("member", "喜欢种花"),
+                                                    ("other-member", "喜欢跑步")])
+                ai.history.save_summaries("other-group", [("member", "喜欢唱歌")])
+                await ai.reply("group", "小樱喜欢什么？", "member")
+                prompt = requests[-1]["message"][0]["text"]
+                self.assertIn("喜欢种花", prompt)
+                self.assertNotIn("喜欢跑步", prompt)
+                self.assertNotIn("喜欢唱歌", prompt)
+                ai.complete.assert_not_awaited()
+
     async def test_full_history_and_memory_recall(self):
         with tempfile.TemporaryDirectory() as root:
             history = History(str(Path(root) / "bot.db"), Path(root) / "images")
