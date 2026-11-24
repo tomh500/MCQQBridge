@@ -20,7 +20,7 @@ MasterGAL 从 MCQQBridge 独立构建。Spigot 插件与 Fabric Mod 可以注册
 
 可选 `MasterGALMenus` 插件接入 BedWars1058 的常规商店和 ChestCommands 菜单。BedWars 的快捷购买按钮调用 BedWars1058 原有购买执行路径；ChestCommands 按钮调用原图标的 `onClick`，保留它自己的权限、价格、物品要求及命令处理。关闭表单或不支持 MasterGAL 的 Java 客户端回到原始库存菜单。
 
-Java 入口使用 TCP 25565，基岩入口使用 UDP 19132。BungeeCord 默认进 `lobby`。三个后端是 `lobby`（Spigot 1.12.2，25500）、`survival`（Spigot 26.2，25501）和 `bw`（Spigot 1.12.2，25502）。后端均监听本机回环地址。Geyser 和 Floodgate 在代理层，当前的 `send-floodgate-data: false` 可以继续使用。基岩身份和表单回调留在代理处理。
+典型拓扑在 BungeeCord 代理开放 Java TCP 25565 和 Geyser Bedrock UDP 19132。为大厅、生存等后端分别配置代理路由。同机部署时后端可监听本机回环地址。Geyser 和 Floodgate 安装在代理层，由代理处理基岩身份和表单回调，可使用 `send-floodgate-data: false`。
 
 ## Fabric 版本线
 
