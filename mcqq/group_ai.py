@@ -415,6 +415,8 @@ class GroupAI:
             return "对话服务暂时无法回应，请稍后再试。"
         lock = self.locks.setdefault(group, asyncio.Lock())
         async with lock:
+            if time.monotonic() < self.unavailable_until:
+                return "对话服务暂时无法回应，请稍后再试。"
             past, recalled = await asyncio.gather(asyncio.to_thread(self.history.recent, group, 12),
                                                   asyncio.to_thread(self.history.recall, group, prompt, speaker),
                                                   return_exceptions=True)
@@ -437,10 +439,15 @@ class GroupAI:
             if not past or past[-1][0] != speaker or self.check(
                     re.sub(r"^<@!?[^>]+>\s*", "", past[-1][1]).strip()) != prompt:
                 messages.append({"role": "user", "content": prompt})
-            if not self.feature_policy.check(group, 'llm', consume=False)['allowed']:
-                return '维护中暂不可用。'
             try:
-                answer = await self.complete(messages, max_tokens=int(self.config.get("max_tokens", 500)))
+                max_tokens = int(self.config.get("max_tokens", 500))
+                verdict = await asyncio.to_thread(self.feature_policy.check, group, 'llm', consume=True)
+                if not verdict['allowed']:
+                    return '维护中暂不可用。'
+                answer = await self.complete(messages, max_tokens=max_tokens)
+            except sqlite3.Error:
+                log.exception("Group chat rate limit check failed")
+                return "对话服务暂时无法回应，请稍后再试。"
             except (aiohttp.ClientError, asyncio.TimeoutError, ValueError, KeyError, IndexError):
                 self.unavailable_until = time.monotonic() + 60
                 return "对话服务暂时无法回应，请稍后再试。"
