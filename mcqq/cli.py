@@ -9,14 +9,18 @@ from importlib.resources import files
 def main():
     parser = argparse.ArgumentParser(prog="mcqq")
     parser.add_argument("action", choices=["init", "bot", "api"])
-    parser.add_argument("--config", default="settings.json")
+    parser.add_argument("--config")
     args = parser.parse_args()
-    path = Path(args.config).resolve()
+    default = 'settings.yml'
+    if args.action != 'init' and not Path(default).exists():
+        default = next((name for name in ('settings.yaml', 'settings.json') if Path(name).exists()), default)
+    path = Path(args.config or default).resolve()
     if args.action == "init":
         path.parent.mkdir(parents=True, exist_ok=True)
         # Exclusive create: never overwrite existing credentials.
         with path.open("x", encoding="utf-8") as stream:
-            stream.write(files("mcqq").joinpath("settings.example.json").read_text(encoding="utf-8"))
+            template = "settings.example.yml" if path.suffix.lower() in (".yml", ".yaml") else "settings.example.json"
+            stream.write(files("mcqq").joinpath(template).read_text(encoding="utf-8"))
         path.chmod(0o600)
         print("Created empty configuration: " + str(path))
         return

@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 from aiohttp import web
+from .waifu_economy import WaifuEconomy
 
 log = logging.getLogger(__name__)
 CATALOG_PATH = Path(__file__).with_name("waifu_catalog.json")
@@ -63,6 +64,18 @@ class DailyWaifuStorage:
             raise ValueError("no alternate portrait")
         return entries[secrets.randbelow(len(entries))]
 
+    def entries(self):
+        # MongoDB controls enablement; source metadata stays in the versioned catalog.
+        by_url = {e['source_url']: e for e in self.fallback}
+        try:
+            enabled = list(self.catalog.find({'enabled': True, 'source_url': {'$in': list(by_url)}}, {'source_url': 1}).max_time_ms(2000))
+            found = [by_url[e['source_url']] for e in enabled if e.get('source_url') in by_url]
+            if found:
+                return found
+        except Exception as exc:
+            log.warning('Waifu catalog unavailable (%s); using bundled catalog', type(exc).__name__)
+        return list(self.fallback)
+
     def result(self, row, *, new=False, exchanged=False):
         return {"name": row[0], "image_url": row[1], "source_url": row[2],
                 "work": self.works.get(row[2], "未知作品"),
@@ -103,9 +116,9 @@ class DailyWaifuStorage:
                 exchanged = False
                 if not previous[3]:
                     entry = self.choose(exclude_url=previous[1])
-                    cursor.execute("""UPDATE daily_waifu_draws SET name=%s,image_url=%s,source_url=%s,swapped=1
+                    cursor.execute("""UPDATE daily_waifu_draws SET name=%s,image_url=%s,source_url=%s,swapped=1,draw_token=%s
                         WHERE subject=%s AND day=%s AND swapped=0 AND image_url=%s AND draw_token=%s""",
-                        (entry["name"], entry["image_url"], entry["source_url"], subject, day, previous[1], previous[4]))
+                        (entry["name"], entry["image_url"], entry["source_url"], secrets.token_hex(16), subject, day, previous[1], previous[4]))
                     exchanged = cursor.rowcount == 1
                 cursor.execute("SELECT name,image_url,source_url,swapped,draw_token FROM daily_waifu_draws WHERE subject=%s AND day=%s",
                                (subject, day))
@@ -143,10 +156,11 @@ class DailyWaifuStorage:
         return {"accepted": True}
 
 
-def register(app, cfg, identity, storage=None):
+def register(app, cfg, identity, storage=None, role_store=None, economy=None):
     enabled = cfg.get("daily_waifu", {}).get("enabled", False)
     if enabled and storage is None:
         storage = DailyWaifuStorage(cfg["daily_waifu"])
+    economy = economy or (WaifuEconomy(storage) if isinstance(storage, DailyWaifuStorage) else None)
     if storage is not None and hasattr(storage, "close"):
         async def cleanup(app):
             yield
@@ -160,7 +174,7 @@ def register(app, cfg, identity, storage=None):
             return web.json_response({"error": "今日老婆功能尚未启用。"}, status=503)
         day = datetime.now(ZoneInfo("Asia/Shanghai")).date().isoformat()
         try:
-            result = await asyncio.to_thread(storage.get_or_create, subject, day)
+            result = await asyncio.to_thread(economy.today if economy else storage.get_or_create, subject, day)
         except Exception as exc:
             log.error("Daily waifu storage unavailable: %s", type(exc).__name__)
             return web.json_response({"error": "今日老婆暂时无法取得，请稍后再试。"}, status=503)
@@ -176,7 +190,7 @@ def register(app, cfg, identity, storage=None):
             token = data.get("draw_token")
             if token is not None and (not isinstance(token, str) or len(token) > 64):
                 raise ValueError("draw_token")
-            result = await asyncio.to_thread(storage.swap_once, subject, day, token)
+            result = await asyncio.to_thread(economy.swap if economy else storage.swap_once, subject, day, token)
         except Exception as exc:
             log.error("Daily waifu exchange unavailable: %s", type(exc).__name__)
             return web.json_response({"error": "换老婆暂时无法使用，请稍后再试。"}, status=503)
@@ -209,12 +223,65 @@ def register(app, cfg, identity, storage=None):
             return web.json_response({"error": "按钮已失效。"}, status=400)
         day = datetime.now(ZoneInfo("Asia/Shanghai")).date().isoformat()
         try:
-            result = await asyncio.to_thread(storage.accept, subject, day, token)
+            event = data.get('event_id')
+            if economy and (not isinstance(event, str) or not 1 <= len(event) <= 256):
+                raise ValueError('event')
+            result = await asyncio.to_thread(economy.accept, subject, day, token, event) if economy else await asyncio.to_thread(storage.accept, subject, day, token)
         except Exception:
             log.exception("Daily waifu acceptance unavailable")
             return web.json_response({"error": "暂时无法确认。"}, status=503)
         return web.json_response(result)
 
+    async def privileged(data):
+        member = data['member_openid']
+        roles = cfg.get('bot_roles', {})
+        if member in roles.get('owners', []):
+            return True
+        if role_store is None:
+            return False
+        with role_store.connect() as db:
+            row = db.execute('SELECT active FROM bot_role_admins WHERE member_openid=?', (member,)).fetchone()
+            return bool(row['active']) if row else member in roles.get('admins', [])
+
+    async def points(request):
+        data = await request.json()
+        subject = identity(data)
+        target, action = data.get('target_member_openid'), data.get('action')
+        if action not in ('query', 'add', 'set') or not economy:
+            raise ValueError('action')
+        if target is not None or action != 'query':
+            if not await privileged(data):
+                return web.json_response({'error': '没有权限。'}, status=403)
+            if not isinstance(target, str) or not 1 <= len(target) <= 128:
+                raise ValueError('target')
+            target_data = dict(data, member_openid=target)
+            subject = identity(target_data)
+        amount = data.get('amount', 0)
+        event = data.get('event_id')
+        if not isinstance(amount, int) or isinstance(amount, bool) or abs(amount) > 2147483647 or (action == 'set' and amount < 0) or not isinstance(event, str) or not 1 <= len(event) <= 256:
+            raise ValueError('amount/event')
+        try:
+            return web.json_response(await asyncio.to_thread(economy.points, subject, action, amount, event))
+        except Exception:
+            log.exception('Waifu point operation failed')
+            return web.json_response({'error': '积分查询暂时不可用。'}, status=503)
+
+    async def wish(request):
+        data = await request.json()
+        subject = identity(data)
+        keyword, event = data.get('keyword'), data.get('event_id')
+        if not economy or not isinstance(keyword, str) or not 1 <= len(keyword.strip()) <= 100 or not isinstance(event, str) or not 1 <= len(event) <= 256:
+            raise ValueError('keyword/event')
+        day = datetime.now(ZoneInfo('Asia/Shanghai')).date().isoformat()
+        try:
+            result = await asyncio.to_thread(economy.wish, subject, day, keyword, event)
+            return web.json_response(dict(result, day=day))
+        except Exception:
+            log.exception('Waifu wish failed')
+            return web.json_response({'error': '许愿暂时不可用。'}, status=503)
+
+    app.router.add_post('/v1/waifu/points', points)
+    app.router.add_post('/v1/waifu/wish', wish)
     app.router.add_post("/v1/waifu/today", today)
     app.router.add_post("/v1/waifu/swap", swap)
     app.router.add_post("/v1/waifu/accept", accept)

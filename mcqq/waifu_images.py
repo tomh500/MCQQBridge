@@ -1,4 +1,4 @@
-"""Publish local portrait assets to QQ's Markdown image material library."""
+"""Publish generated images and local portraits to QQ's Markdown material library."""
 import asyncio
 import hashlib
 import re
@@ -21,12 +21,14 @@ class PortraitMaterials:
             raise ValueError("unsupported portrait URL")
         asset = self.directory / (match.group(1) + "." + match.group(2).lower())
         data = await asyncio.to_thread(asset.read_bytes)
-        if not data or len(data) > 10_000_000:
-            raise ValueError("invalid portrait size")
         digest = hashlib.sha256(data).hexdigest()
         ext = match.group(2).lower()
         content_type = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "gif": "image/gif", "webp": "image/webp"}[ext]
-        filename = "mcqq-waifu-" + digest + "." + ext
+        return await self.publish(data, "mcqq-waifu-" + digest + "." + ext, content_type)
+
+    async def publish(self, data, filename, content_type):
+        if not data or len(data) > 10_000_000:
+            raise ValueError("invalid image size")
         async with self.lock:
             cursor = ""
             while True:
@@ -46,9 +48,9 @@ class PortraitMaterials:
                     response.raise_for_status()
                     etag = response.headers.get("ETag", "").strip('"')
             if etag.lower() != hashlib.md5(data).hexdigest():
-                raise ValueError("portrait upload checksum mismatch")
+                raise ValueError("image upload checksum mismatch")
             done = await self.api._http.request(Route("POST", "/v2/media-images/complete"), json={"upload_id": info["upload_id"], "md5": etag})
             url = done.get("url", "")
             if not url.startswith("qqbot-media://image/v1/"):
-                raise ValueError("invalid portrait material reference")
+                raise ValueError("invalid image material reference")
             return url

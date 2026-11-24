@@ -1,5 +1,7 @@
 """Read-only host details for /状态情报."""
 import platform
+import shutil
+import time
 from pathlib import Path
 
 
@@ -28,3 +30,32 @@ def read_system_info():
     if total <= 0 or not 0 <= available <= total:
         raise ValueError("invalid host memory")
     return format_system_info(os_name, platform.release(), uptime, total, available)
+
+
+def cpu_times():
+    with Path("/proc/stat").open() as stats:
+        fields = stats.readline().split()
+    if fields[0] != "cpu" or len(fields) < 9:
+        raise ValueError("invalid CPU counters")
+    counters = tuple(map(int, fields[1:9]))
+    return sum(counters), counters[3] + counters[4]
+
+
+def read_extra_metrics():
+    try:
+        first_total, first_idle = cpu_times()
+        time.sleep(0.2)
+        total, idle = cpu_times()
+        elapsed = total - first_total
+        idle_elapsed = idle - first_idle
+        if elapsed <= 0 or not 0 <= idle_elapsed <= elapsed:
+            raise ValueError("invalid CPU sample")
+        cpu = f"{100 * (elapsed - idle_elapsed) / elapsed:.1f}%"
+    except (OSError, ValueError, IndexError):
+        cpu = "暂时无法读取"
+    try:
+        disk = shutil.disk_usage(Path.home())
+        disk_space = f"{disk.free / 1024**3:.1f}/{disk.total / 1024**3:.1f} GiB"
+    except OSError:
+        disk_space = "暂时无法读取"
+    return f"CPU 占用率：{cpu}\n硬碟剩余空间：{disk_space}"

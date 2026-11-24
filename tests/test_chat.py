@@ -1,9 +1,10 @@
+import asyncio
 import tempfile
 import unittest
 from collections import OrderedDict
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 from aiohttp.test_utils import TestClient, TestServer
 from mcqq.bot import QQBot
@@ -128,7 +129,8 @@ class ChatTests(unittest.IsolatedAsyncioTestCase):
         from mcqq.commands import parse
         self.assertEqual(parse('/跨群信息 [朋友群]  hello /op @a !'),
                          ('cross_group', '朋友群', 'hello /op @a !'))
-        self.assertEqual(parse('/跨群信息 朋友群 hello !'), ('cross_group', '朋友群', 'hello !'))
+        self.assertEqual(parse('/跨群信息 朋友群 hello !'),
+                         ('cross_group_implicit', '朋友群', '朋友群 hello !'))
         self.assertEqual(parse('/跨群信息 ALL hello'), ('cross_group', 'ALL', 'hello'))
         self.assertEqual(parse('/跨群信息'), ('cross_group_list', None, None))
         self.cfg['allowed_groups'] = ['group', 'other']
@@ -150,8 +152,181 @@ class ChatTests(unittest.IsolatedAsyncioTestCase):
         self.cfg['chat_bridge']['outbound_groups'] = ['group', 'other']
         message.content = '/跨群信息 ALL hello everyone'
         bot.api.post_group_message.reset_mock()
-        self.assertEqual(await bot.group_response(message), '已发送到 2 个群。')
-        self.assertEqual([c.kwargs['group_openid'] for c in bot.api.post_group_message.await_args_list], ['group', 'other'])
+        self.assertEqual(await bot.group_response(message), '已发送到 1 个群。')
+        bot.api.post_group_message.assert_awaited_once_with(
+            group_openid='other', msg_type=0, content='【跨群信息｜官方群名】小明：hello everyone')
+        message.content = '/跨群信息 朋友群 hello  world'
+        self.assertEqual(await bot.group_response(message), '已发送到 1 个群。')
+        self.assertTrue(bot.api.post_group_message.await_args.kwargs['content'].endswith('hello  world'))
+        for body in ('你好', 'hello  everyone'):
+            message.content = '/跨群信息 ' + body
+            response = await bot.group_response(message)
+            self.assertTrue(response.startswith('已发送到 1 个群。\n⚠️'))
+            self.assertIn('/跨群信息 群别名 信息', response)
+            self.assertTrue(bot.api.post_group_message.await_args.kwargs['content'].endswith('：' + body))
+        bot.api.post_group_message.reset_mock()
+        message.content = '/跨群信息 [朋友群'
+        self.assertIn('格式', await bot.group_response(message))
+        message.content = '/跨群信息 ' + 'A' * 32 + ' 给指定群'
+        self.assertIn('目标群未找到', await bot.group_response(message))
+        bot.api.post_group_message.assert_not_awaited()
+
+    def cross_group_bot(self):
+        self.cfg['allowed_groups'] = ['group', 'other', 'third']
+        self.cfg['chat_bridge']['group_aliases'] = {'group': '一群', 'other': '二群', 'third': 'MC群'}
+        bot = QQBot.__new__(QQBot)
+        bot.settings = self.cfg
+        bot.seen = OrderedDict()
+        bot.api = SimpleNamespace(post_group_message=AsyncMock(), post_group_file=AsyncMock())
+        bot.group_name = AsyncMock(return_value='')
+        bot.reply_group_text = AsyncMock()
+        bot.relay_group = AsyncMock()
+        return bot
+
+    @staticmethod
+    def cross_group_message(event, text, *, group='group', member='member', raw=None):
+        return SimpleNamespace(id=event, content=text, group_openid=group, raw_data=raw or {},
+                               author=SimpleNamespace(member_openid=member, nickname='小明'))
+
+    async def test_cross_group_mode_renewal_scope_and_expiry(self):
+        bot = self.cross_group_bot()
+        message = self.cross_group_message
+        with patch('mcqq.bot.time.monotonic', return_value=100) as clock:
+            start = message('start', '/跨群信息 临时全量模式 一群, 二群,other')
+            await bot.on_group_message_create(start)
+            self.assertIn('2 小时', bot.reply_group_text.await_args.args[1])
+            bot.reply_group_text.reset_mock()
+            first = message('first', '这是一段\n普通聊天')
+            await bot.on_group_message_create(first)
+            await bot.on_group_at_message_create(first)
+            bot.api.post_group_message.assert_awaited_once_with(
+                group_openid='other', msg_type=0, content='【跨群信息｜一群】小明：这是一段\n普通聊天')
+            bot.reply_group_text.assert_not_awaited()
+            another = message('another', '其他人发言', member='different')
+            await bot.on_group_message_create(another)
+            bot.relay_group.assert_awaited_once_with(another)
+            clock.return_value = 200
+            await bot.on_group_message_create(message('renew', '/跨群信息 临时全量模式 MC群'))
+            await bot.on_group_message_create(message('invalid', '/跨群信息 临时全量模式 二群,未知群'))
+            self.assertIn('未知群', bot.reply_group_text.await_args.args[1])
+            clock.return_value = 7399
+            await bot.on_group_message_create(message('still-active', '续期内'))
+            self.assertEqual(bot.api.post_group_message.await_args.kwargs['group_openid'], 'third')
+            clock.return_value = 7400
+            expired = message('expired', '刚刚到期')
+            await bot.on_group_message_create(expired)
+            bot.relay_group.assert_awaited_with(expired)
+
+    async def test_cross_group_mode_all_failures_and_stop(self):
+        bot = self.cross_group_bot()
+        message = self.cross_group_message
+        await bot.on_group_message_create(message('start', '/跨群信息 临时全量模式'))
+        bot.reply_group_text.reset_mock()
+        bot.api.post_group_message.side_effect = [{}, RuntimeError('QQ send failed')]
+        with self.assertLogs('mcqq.bot', level='ERROR'):
+            await bot.on_group_message_create(message('partial', '部分成功'))
+        self.assertEqual([call.kwargs['group_openid'] for call in bot.api.post_group_message.await_args_list],
+                         ['other', 'third'])
+        self.assertIn('发送失败：MC群', bot.reply_group_text.await_args.args[1])
+        await bot.on_group_message_create(message('stop', '/跨群信息 结束全量模式'))
+        normal = message('normal', '已结束')
+        await bot.on_group_message_create(normal)
+        bot.relay_group.assert_awaited_once_with(normal)
+
+    async def test_cross_group_stop_cancels_pending_scope_lookup(self):
+        bot = self.cross_group_bot()
+        message = self.cross_group_message
+        lookup_started = asyncio.Event()
+        lookup_result = asyncio.get_running_loop().create_future()
+
+        async def resolve(_):
+            lookup_started.set()
+            return await lookup_result
+
+        bot.match_cross_groups = resolve
+        start = asyncio.create_task(bot.on_group_message_create(
+            message('start', '/跨群信息 临时全量模式 等待群名查询')))
+        await asyncio.wait_for(lookup_started.wait(), 1)
+        await bot.on_group_message_create(message('stop', '/跨群信息 结束全量模式'))
+        lookup_result.set_result(['other'])
+        await start
+        normal = message('normal', '停止后继续聊天')
+        await bot.on_group_message_create(normal)
+        bot.api.post_group_message.assert_not_awaited()
+        bot.relay_group.assert_awaited_once_with(normal)
+
+    async def test_cross_group_mode_can_be_managed_for_a_mentioned_member(self):
+        bot = self.cross_group_bot()
+        bot.role_for = AsyncMock(return_value="member")
+        message = self.cross_group_message
+        subject = "A" * 32
+        mention = "<@!" + subject + ">"
+        enable = "/跨群信息 临时全量模式 二群,third !" + mention
+        stop = "/跨群信息 结束全量模式 " + mention
+        await bot.on_group_message_create(message("rejected-start", enable))
+        self.assertIn("只有 Bot 主人或管理员", bot.reply_group_text.await_args.args[1])
+        self.assertIsNone(bot.active_cross_group_mode(subject))
+
+        bot.role_for.return_value = "admin"
+        await bot.on_group_message_create(message("admin-start", enable, member="admin"))
+        bot.role_for.assert_awaited_with("group", "admin")
+        self.assertIn("为指定成员开启", bot.reply_group_text.await_args.args[1])
+        self.assertIsNone(bot.active_cross_group_mode("admin"))
+        bot.reply_group_text.reset_mock()
+        await bot.on_group_message_create(message("forward", "正在聊天", member=subject.lower()))
+        self.assertEqual([item.kwargs["group_openid"] for item in bot.api.post_group_message.await_args_list],
+                         ["other", "third"])
+        bot.reply_group_text.assert_not_awaited()
+
+        bot.role_for.return_value = "member"
+        await bot.on_group_message_create(message("rejected-stop", stop))
+        self.assertIsNotNone(bot.active_cross_group_mode(subject))
+        bot.role_for.return_value = "owner"
+        await bot.on_group_message_create(message("owner-stop", stop, member="owner"))
+        self.assertIn("结束指定成员", bot.reply_group_text.await_args.args[1])
+        self.assertIsNone(bot.active_cross_group_mode(subject))
+
+        raw = {"mentions": [{"member_openid": subject}]}
+        await bot.on_group_message_create(message(
+            "owner-all", "/跨群信息 临时全量模式 !@群友", member="owner", raw=raw))
+        self.assertIsNone(bot.active_cross_group_mode(subject)[1])
+
+    async def test_cross_group_quote_uses_qq_receipt_and_takes_priority_over_mode(self):
+        bot = self.cross_group_bot()
+        message = self.cross_group_message
+        bot.api.post_group_message.return_value = {'id': 'sent', 'ext_info': {'ref_idx': 'REFIDX_sent'}}
+        await bot.on_group_message_create(message('send', '/跨群信息 二群 你好'))
+        await bot.on_group_message_create(message('start', '/跨群信息 临时全量模式 MC群', group='other'))
+        bot.reply_group_text.reset_mock()
+        bot.api.post_group_message.reset_mock()
+        quote = {'message_scene': {'ext': ['msg_idx=REFIDX_reply', 'ref_msg_idx=REFIDX_sent']},
+                 'msg_elements': [{'msg_idx': 'REFIDX_sent', 'content': '【跨群信息｜一群】小明：你好'}]}
+        response = message('reply', '收到', group='other', raw=quote)
+        await bot.on_group_message_create(response)
+        await bot.on_group_at_message_create(response)
+        bot.api.post_group_message.assert_awaited_once_with(
+            group_openid='group', msg_type=0, content='【跨群信息｜二群】小明：收到')
+        bot.reply_group_text.assert_not_awaited()
+        for group, raw in (('third', quote), ('other', {'msg_elements': quote['msg_elements']})):
+            unrelated = message('unrelated-' + group, '普通引用', group=group, member='other-user', raw=raw)
+            await bot.on_group_message_create(unrelated)
+            bot.relay_group.assert_awaited_with(unrelated)
+
+    async def test_cross_group_mode_forwards_attachments_without_copying_quoted_content(self):
+        bot = self.cross_group_bot()
+        message = self.cross_group_message
+        await bot.on_group_message_create(message('start', '/跨群信息 临时全量模式 二群'))
+        bot.reply_group_text.reset_mock()
+        bot.api.post_group_file.return_value = {'file_info': 'uploaded-image'}
+        image_url = 'https://multimedia.nt.qq.com.cn/image'
+        raw = {'attachments': [{'content_type': 'image/png', 'url': image_url}],
+               'msg_elements': [{'content': '被引用的正文'}]}
+        await bot.on_group_message_create(message('image', '', raw=raw))
+        bot.api.post_group_file.assert_awaited_once_with(group_openid='other', file_type=1, url=image_url)
+        bot.api.post_group_message.assert_awaited_once_with(
+            group_openid='other', msg_type=7, content='【跨群信息｜一群】小明：',
+            media={'file_info': 'uploaded-image'})
+        bot.reply_group_text.assert_not_awaited()
 
     async def test_remote_command_requires_binding_and_backend_token(self):
         identity = dict(app_id='app', group_openid='group', member_openid='member', event_id='cmd1',
@@ -221,6 +396,27 @@ class ChatTests(unittest.IsolatedAsyncioTestCase):
         from mcqq.system_info import format_system_info
         self.assertEqual(format_system_info('Ubuntu 26.04', '6.8', 90000, 8*1048576, 3*1048576),
                          '【机器状态情报】\n系统：Ubuntu 26.04\n内核：6.8\n已运行：1天1小时\n内存：5.0/8.0 GiB（62%）')
+
+    async def test_group_intelligence_shortcuts_warn_and_use_normal_handlers(self):
+        bot = self.cross_group_bot()
+        bot.daily_reports = SimpleNamespace()
+        bot.group_ai = SimpleNamespace(capture=AsyncMock())
+        bot.manual_group_report = AsyncMock()
+        bot.run_group_plugin = AsyncMock()
+        mention = "<@!" + "A" * 32 + ">"
+        star = self.cross_group_message("star", "/群情报")
+        profile = self.cross_group_message("profile", "/群情报 " + mention)
+
+        await bot.on_group_message_create(star)
+        await bot.on_group_at_message_create(star)
+        await bot.on_group_message_create(profile)
+        bot.manual_group_report.assert_awaited_once()
+        self.assertEqual(bot.manual_group_report.await_args.args[0], star)
+        bot.run_group_plugin.assert_awaited_once()
+        self.assertEqual(bot.run_group_plugin.await_args.args[1:3], (mention, profile))
+        self.assertEqual([call.args[1] for call in bot.reply_group_text.await_args_list],
+                         ["⚠️ 这是非标准用法，建议使用：/群情报 今日",
+                          "⚠️ 这是非标准用法，建议使用：/群情报 成员 " + mention])
 
     async def test_console_said_uses_console_identity(self):
         response = await self.post('from-game', dict(source='console', server='survival', event_id='console1',
