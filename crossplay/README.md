@@ -20,6 +20,8 @@ MasterGAL 从 MCQQBridge 独立构建。Spigot 插件与 Fabric Mod 可以注册
 
 可选 `MasterGALMenus` 插件接入 BedWars1058 的常规商店和 ChestCommands 菜单。BedWars 的快捷购买按钮调用 BedWars1058 原有购买执行路径；ChestCommands 按钮调用原图标的 `onClick`，保留它自己的权限、价格、物品要求及命令处理。关闭表单或不支持 MasterGAL 的 Java 客户端回到原始库存菜单。
 
+安装兼容的 GadgetsMenu 时，基岩玩家打开 GadgetsMenu 主菜单可使用 Floodgate 表单。表单按钮沿用 GadgetsMenu 的原有点击处理，子菜单和表单不可用时仍可使用插件原版界面。
+
 典型拓扑在 BungeeCord 代理开放 Java TCP 25565 和 Geyser Bedrock UDP 19132。为大厅、生存等后端分别配置代理路由。同机部署时后端可监听本机回环地址。Geyser 和 Floodgate 安装在代理层，由代理处理基岩身份和表单回调，可使用 `send-floodgate-data: false`。
 
 ## Fabric 版本线

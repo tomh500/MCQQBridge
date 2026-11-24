@@ -25,6 +25,10 @@ def register(app, cfg, store, identity, resolve_media):
                 event TEXT PRIMARY KEY, group_id TEXT NOT NULL, member_openid TEXT NOT NULL,
                 nickname TEXT NOT NULL, received REAL NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS chat_group_names (
+                subject TEXT NOT NULL, group_id TEXT NOT NULL, nickname TEXT NOT NULL,
+                PRIMARY KEY(subject, group_id)
+            );
         """)
 
     def groups():
@@ -72,11 +76,17 @@ def register(app, cfg, store, identity, resolve_media):
             if request.path == "/v1/chat/from-qq":
                 subject = identity(data)
                 nickname = data.get("nickname", "")
+                group_nickname = data.get("group_nickname", "")
                 role = data.get("role", "member")
                 if role not in ("member", "admin", "owner"):
                     raise ValueError("role")
                 if not isinstance(nickname, str) or len(nickname) > 128:
                     raise ValueError("nickname")
+                if not isinstance(group_nickname, str) or len(group_nickname) > 128:
+                    raise ValueError("group_nickname")
+                if group_nickname:
+                    db.execute("INSERT OR REPLACE INTO chat_group_names VALUES(?,?,?)",
+                               (subject, data["group_openid"], group_nickname))
                 if nickname:
                     db.execute("INSERT OR REPLACE INTO chat_names VALUES(?,?,?)", (subject, data["group_openid"], nickname))
                 cached_name = db.execute("SELECT nickname FROM chat_names WHERE subject=? AND group_id=?", (subject, data["group_openid"])).fetchone()
@@ -109,7 +119,7 @@ def register(app, cfg, store, identity, resolve_media):
                     enqueue(db, "game", "console:" + event,
                             {"text": text, "source": "console", "uuid": "", "name": "Console", "group_name": "控制台", "role": "member"})
                 for group in ([target] if target else outbound_groups()):
-                    nick = db.execute("SELECT nickname FROM chat_names WHERE subject=? AND group_id=?",
+                    nick = db.execute("SELECT nickname FROM chat_group_names WHERE subject=? AND group_id=?",
                                       (binding["subject"], group)).fetchone() if binding else None
                     enqueue(db, "qq", group + ":" + event,
                             {"group": group, "text": ("[Console]" if console else "[游戏内]") + (nick[0] if nick else name) + ":" + text})

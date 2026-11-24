@@ -22,6 +22,8 @@ import org.bukkit.event.Listener;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.Plugin;
+import org.bukkit.plugin.IllegalPluginAccessException;
+import org.bukkit.plugin.RegisteredListener;
 import top.luotiany1.mcqq.crossplay.GalMenu;
 import top.luotiany1.mcqq.crossplay.SpigotMasterGAL;
 
@@ -44,9 +46,20 @@ public final class BedWarsMenuBridge implements Listener {
         }
     }
 
+    public void register() {
+        try {
+            plugin.getServer().getPluginManager().registerEvents(this, plugin);
+        } catch (IllegalPluginAccessException missingStaticHandlerList) {
+            // BedWars1058 21.11.2 only provides the instance handler accessor.
+            new ShopOpenEvent(null).getHandlers().register(new RegisteredListener(
+                    this, (listener, event) -> onShopOpen((ShopOpenEvent) event),
+                    EventPriority.HIGHEST, plugin, true));
+        }
+    }
+
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onShopOpen(ShopOpenEvent event) {
-        if (bedWars == null || openingNativeShop.contains(event.getPlayer().getUniqueId())) {
+        if (event.isCancelled() || bedWars == null || openingNativeShop.contains(event.getPlayer().getUniqueId())) {
             return;
         }
         Player player = event.getPlayer();

@@ -67,6 +67,8 @@ QQ 开放平台 / QQ 群
 
 ## 多群路由和名称
 
+桥接 QQ 消息时，群内提及会显示事件或缓存中的成员称呼。游戏内 `/said` 会优先使用目标群里已缓存的群昵称，缺少群昵称时显示游戏名。
+
 `allowed_groups` 列出授权 group_openid，机器人 `/本群ID` 可获取；数字QQ群号不能用于消息路由。`chat_bridge.inbound_groups` 指定接收到游戏的群，必须属于 allowed_groups；空数组禁止接收，省略兼容旧行为。`chat_bridge.group_aliases` 为 group_openid 到显示别名的映射。
 
 `chat_bridge.outbound_groups` 独立指定接收游戏消息的群，也必须是 `allowed_groups` 的子集；空数组禁止发送，省略则兼容旧行为，发往所有授权群。定向群命令同样受此列表限制；不在列表中的目标会被拒绝。修改机器人配置后需重启 API 和 Bot。

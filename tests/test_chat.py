@@ -53,7 +53,7 @@ class ChatTests(unittest.IsolatedAsyncioTestCase):
         store = Store(self.cfg["database"])
         store.bind(dict(app_id="app", group_openid="group", member_openid="member", event_id="bind", action="bind", platform="java", name="Steve"),
                    dict(uuid=PLAYER, name="Steve", platform="java"))
-        await self.post("from-qq", self.qq(nickname="群昵称"))
+        await self.post("from-qq", self.qq(nickname="QQ 名字", group_nickname="群昵称"))
         messages = (await (await self.post("to-game", {}, True)).json())["messages"]
         self.assertEqual((messages[0]["uuid"], messages[0]["name"]), (PLAYER, "Steve"))
         game = dict(uuid=PLAYER, name="Steve", server="other", event_id="game1", text="/op  @a %s & !")
@@ -187,6 +187,22 @@ class ChatTests(unittest.IsolatedAsyncioTestCase):
     def cross_group_message(event, text, *, group='group', member='member', raw=None):
         return SimpleNamespace(id=event, content=text, group_openid=group, raw_data=raw or {},
                                author=SimpleNamespace(member_openid=member, nickname='小明'))
+
+    async def test_game_relay_converts_mentions_and_sends_group_card(self):
+        bot = self.cross_group_bot()
+        bot.call_service = AsyncMock(return_value={})
+        member = "A" * 32
+        text = f"<@{member}> <@{'B' * 32}> 你好"
+        message = self.cross_group_message("mention", text, raw={
+            "content": text,
+            "author": {"member_nickname": "群内发件人"},
+            "mentions": [{"member_openid": member, "member_nickname": "群内称呼"}],
+        })
+        await QQBot.relay_group(bot, message)
+        path, payload = bot.call_service.call_args.args
+        self.assertEqual(path, "/v1/chat/from-qq")
+        self.assertEqual(payload["text"], "[tag 群内称呼] [tag 未知群成员] 你好")
+        self.assertEqual(payload["group_nickname"], "群内发件人")
 
     async def test_cross_group_mode_renewal_scope_and_expiry(self):
         bot = self.cross_group_bot()

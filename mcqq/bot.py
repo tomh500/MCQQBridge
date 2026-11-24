@@ -417,11 +417,21 @@ class QQBot(botpy.Client):
         rich = media.extract(raw)
         if group not in self.settings.get("chat_bridge", {}).get("inbound_groups", self.settings.get("allowed_groups", [])) or not member or (not rich["text"].strip() and not rich["media"]) or getattr(author, "bot", False):
             return
+        author_fields = raw.get("author") or {}
+        if not isinstance(author_fields, dict):
+            author_fields = {}
+        group_nickname = (author_fields.get("member_nickname") or author_fields.get("card")
+                          or getattr(author, "member_nickname", None) or "")
+        if not isinstance(group_nickname, str):
+            group_nickname = ""
+        group_nickname = re.sub(r"[\x00-\x1f\x7f<>\[\]]", "", group_nickname).strip()[:128]
+        rendered = await self.cross_group_text(message, rich["text"], preserve_faces=True)
         try:
             result = await self.call_service("/v1/chat/from-qq", {
                 "app_id": self.settings["app_id"], "group_openid": group, "member_openid": member,
                 "group_name": await self.group_name(group),
-                "event_id": message.id, "text": rich["text"], "media": rich["media"],
+                "event_id": message.id, "text": rendered, "media": rich["media"],
+                "group_nickname": group_nickname,
                 "nickname": getattr(author, "nickname", None) or getattr(author, "username", None) or "",
                 "role": getattr(author, "member_role", None) or "member"})
             if "error" in result:
@@ -706,8 +716,9 @@ class QQBot(botpy.Client):
         outbound = self.cross_group_outbound()
         return [target for target in dict.fromkeys(targets) if target != group and target in outbound]
 
-    async def cross_group_text(self, message, text):
-        text = "[表情包]" if media.face_payload(text) else media.FACE_TOKEN.sub("[表情包]", text)
+    async def cross_group_text(self, message, text, *, preserve_faces=False):
+        if not preserve_faces:
+            text = "[表情包]" if media.face_payload(text) else media.FACE_TOKEN.sub("[表情包]", text)
         mentions = dict.fromkeys(member.upper() for member in GROUP_MENTION.findall(text))
         if not mentions:
             return text
