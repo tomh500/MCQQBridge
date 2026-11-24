@@ -17,6 +17,7 @@ import aiohttp
 import yaml
 
 from . import media
+from .astrbot_chat import AstrBotChat
 from .feature_policy import FeaturePolicy
 from .llm_context import chat_text, complete_json, context_batches
 
@@ -276,18 +277,19 @@ class History:
                       )""",
                    (group, summary, member, json.dumps(embedding), time.time(), group, member, summary))
 
-    def recall(self, group, query, speaker=None, limit=3, *, names=None):
+    def recall(self, group, query, speaker=None, limit=3, *, names=None, include_mentions=True):
         q = vector(query)
-        names = self.profile_names(group) if names is None else names
+        names = (self.profile_names(group) if names is None else names) if include_mentions else ()
         by_name = {}
         for member, name in names:
             by_name.setdefault(name, set()).add(member)
         mentioned = {next(iter(ids)) for name, ids in by_name.items()
                      if len(name) >= 2 and name in query and len(ids) == 1}
         with self.connect() as db:
-            mentioned.update(member for member, in db.execute(
-                "SELECT DISTINCT member_id FROM group_ai_memory WHERE group_id=? AND member_id<>''", (group,))
-                             if member in query)
+            if include_mentions:
+                mentioned.update(member for member, in db.execute(
+                    "SELECT DISTINCT member_id FROM group_ai_memory WHERE group_id=? AND member_id<>''", (group,))
+                                 if member in query)
             targets = sorted({"", *mentioned} | ({speaker} if speaker else set()))
             placeholders = ",".join("?" for _ in targets)
             memories = db.execute(f"""SELECT member_id,summary,embedding FROM group_ai_memory
@@ -313,6 +315,8 @@ class GroupAI:
         path = Path(settings.get("group_ai_config", ""))
         self.config = yaml.safe_load(path.read_text(encoding="utf-8")) if path.is_file() else {"enabled": False}
         self.config = self.config or {}
+        astrbot = self.config.get("astrbot_chat")
+        self.astrbot_chat = AstrBotChat(astrbot, path.parent) if astrbot else None
         database = settings["database"]
         storage = settings.get("group_ai_storage") or {}
         local = any(storage.get(role, "sqlite") == "sqlite" for role in ("history", "memory", "reports"))
@@ -409,6 +413,31 @@ class GroupAI:
             return await complete_json(self, instructions, evidence, max_tokens=max_tokens)
 
     async def reply(self, group, prompt, speaker=None):
+        if self.astrbot_chat and speaker:
+            async with self.locks.setdefault(group, asyncio.Lock()):
+                if not self.feature_policy.check(group, 'llm', consume=False)['allowed']:
+                    return '维护中暂不可用。'
+                try:
+                    recalled = await asyncio.to_thread(self.history.recall, group, prompt, speaker,
+                                                       include_mentions=False)
+                except Exception as error:
+                    log.warning("AstrBot legacy memory unavailable (%s)", type(error).__name__)
+                    recalled = []
+                try:
+                    memories = [checked[:450] for value in recalled if (checked := self.check(value))]
+                    verdict = await asyncio.to_thread(self.feature_policy.check, group, 'llm', consume=True)
+                    if not verdict['allowed']:
+                        return '维护中暂不可用。'
+                    answer = await self.astrbot_chat.reply(group, speaker, prompt, memories=memories)
+                except sqlite3.Error:
+                    log.exception("Group chat rate limit check failed")
+                    return "对话服务暂时无法回应，请稍后再试。"
+                except (aiohttp.ClientError, asyncio.TimeoutError, OSError, ValueError) as error:
+                    log.warning("AstrBot group chat failed (%s)", type(error).__name__)
+                    return "对话服务暂时无法回应，请稍后再试。"
+                if not answer:
+                    return "对话服务暂时无法回应，请稍后再试。"
+                return await self.save_reply(group, answer)
         if not self.configured():
             return "群对话尚未设定模型服务。"
         if time.monotonic() < self.unavailable_until:
@@ -451,14 +480,17 @@ class GroupAI:
             except (aiohttp.ClientError, asyncio.TimeoutError, ValueError, KeyError, IndexError):
                 self.unavailable_until = time.monotonic() + 60
                 return "对话服务暂时无法回应，请稍后再试。"
-            answer = self.check(answer)
-            if not answer:
-                return "回应包含限制词，已停止发送。"
-            try:
-                await asyncio.to_thread(self.history.add, "bot:" + secrets.token_hex(16), group, "__bot__", answer)
-            except Exception as error:
-                log.warning("Group reply could not be cached (%s)", type(error).__name__)
-            return answer
+            return await self.save_reply(group, answer)
+
+    async def save_reply(self, group, answer):
+        answer = self.check(answer)
+        if not answer:
+            return "回应包含限制词，已停止发送。"
+        try:
+            await asyncio.to_thread(self.history.add, "bot:" + secrets.token_hex(16), group, "__bot__", answer)
+        except Exception as error:
+            log.warning("Group reply could not be cached (%s)", type(error).__name__)
+        return answer
 
     async def summarize(self, group):
         if not self.configured():

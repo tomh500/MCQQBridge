@@ -1,0 +1,17 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "MasterGAL",
+    "description": "MasterGAL artwork for Bedrock forms.",
+    "uuid": "b6009330-adf9-430e-9807-435a8147669d",
+    "version": [0, 1, 0],
+    "min_engine_version": [1, 21, 0]
+  },
+  "modules": [
+    {
+      "type": "resources",
+      "uuid": "a19a5d92-120c-46ff-9ebd-051d7923f305",
+      "version": [0, 1, 0]
+    }
+  ]
+}

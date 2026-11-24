@@ -15,6 +15,17 @@ QQ_DOMAINS = ("qq.com", "qq.com.cn", "qpic.cn", "gtimg.cn", "gtimg.com", "idqqim
 MAX_BYTES = 8 * 1024 * 1024
 MAX_ITEMS = 8
 TTL = 3600
+FACE_TOKEN = re.compile(r'<faceType\s*=\s*[^<>]*?faceId\s*=\s*[^<>]*?>', re.I)
+
+
+def face_payload(content):
+    if content.lstrip().startswith("{"):
+        try:
+            candidate = json.loads(content)
+        except ValueError:
+            return None
+        if isinstance(candidate, dict) and "faceType" in candidate and "faceId" in candidate:
+            return candidate
 
 
 def qq_url(value):
@@ -53,21 +64,14 @@ def extract(data):
             return
         content = node.get("content") or ""
         if isinstance(content, str):
-            face = None
-            if content.lstrip().startswith("{"):
-                try:
-                    candidate = json.loads(content)
-                    if isinstance(candidate, dict) and "faceType" in candidate and "faceId" in candidate:
-                        face = candidate
-                except (ValueError, TypeError):
-                    pass
+            face = face_payload(content)
             # QQ may serialize rich faces as a diagnostic-looking angle-bracket
             # token rather than JSON, including inside otherwise normal text.
             def strip_face(match):
                 nonlocal missing_face
                 missing_face = True
                 return ""
-            content = re.sub(r'<faceType\s*=\s*[^<>]*?faceId\s*=\s*[^<>]*?>', strip_face, content, flags=re.I)
+            content = FACE_TOKEN.sub(strip_face, content)
             if face:
                 # QQ's standard face IDs have an official public GIF counterpart.
                 face_id = str(face.get("faceId", ""))

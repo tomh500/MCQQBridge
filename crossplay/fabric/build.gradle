@@ -1,0 +1,41 @@
+plugins { id 'net.fabricmc.fabric-loom' version '1.17.21' }
+
+def target = providers.gradleProperty('minecraftTarget').orElse('26.3').get()
+def apiVersions = [
+    '26.2': [networking: '6.3.4+2989c6a09e', command: '3.1.0+00cb03469e', lifecycle: '4.1.4+29b6eb019e'],
+    '26.3': [networking: '6.4.0+a21c9eb65d', command: '3.1.2+fcdff87f5d', lifecycle: '4.1.9+ffef5f675d']
+]
+if (!apiVersions.containsKey(target)) {
+    throw new GradleException("Unsupported Minecraft target: ${target}")
+}
+
+layout.buildDirectory.set(layout.projectDirectory.dir("build/${target}"))
+group = 'top.luotiany1'
+version = "0.3.0+${target}"
+base { archivesName = 'FabricMasterGAL' }
+repositories { mavenCentral() }
+
+dependencies {
+    def api = apiVersions[target]
+    minecraft "com.mojang:minecraft:${target}"
+    implementation 'net.fabricmc:fabric-loader:0.19.5'
+    implementation "net.fabricmc.fabric-api:fabric-networking-api-v1:${api.networking}"
+    implementation "net.fabricmc.fabric-api:fabric-command-api-v2:${api.command}"
+    implementation "net.fabricmc.fabric-api:fabric-lifecycle-events-v1:${api.lifecycle}"
+}
+
+sourceSets.main.java {
+    srcDir '../common/src/main/java'
+    exclude '**/BedrockForm.java'
+}
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 25
+}
+processResources {
+    inputs.property 'version', project.version
+    inputs.property 'minecraftTarget', target
+    filesMatching('fabric.mod.json') {
+        expand(version: project.version, minecraftTarget: target)
+    }
+}

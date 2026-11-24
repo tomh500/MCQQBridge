@@ -1,0 +1,6 @@
+name: MasterGALMenus
+main: top.luotiany1.mcqq.crossplay.menus.MasterGALMenusPlugin
+version: 0.3.0
+description: Optional Fabric and Bedrock menus backed by native server inventory checks.
+depend: [SpigotMasterGAL]
+softdepend: [BedWars1058, ChestCommands]

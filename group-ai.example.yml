@@ -17,3 +17,9 @@ examples:
     content: 伺服器今天热闹吗？
   - role: assistant
     content: 可以用 /服务器 查看最新人数喔。
+# Optional AstrBot backend for ordinary QQ group conversations.
+# Each group/member pair starts its own AstrBot WebChat session.
+# astrbot_chat:
+#   base_url: http://127.0.0.1:6185
+#   key_file: .private-astrbot-key
+#   config_id: default

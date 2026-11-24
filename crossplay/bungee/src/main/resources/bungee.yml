@@ -1,0 +1,4 @@
+name: BungeeMasterGAL
+main: top.luotiany1.mcqq.crossplay.BungeeMasterGAL
+version: 0.2.0
+depends: [floodgate]

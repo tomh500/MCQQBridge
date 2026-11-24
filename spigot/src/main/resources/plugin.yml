@@ -2,6 +2,7 @@ name: MCQQSpigot
 main: top.luotiany1.mcqq.SaidPlugin
 version: 2.0.0
 author: luotiany
+softdepend: [BedWars1058]
 commands:
   said:
     description: 将聊天发送到互通子服和QQ群

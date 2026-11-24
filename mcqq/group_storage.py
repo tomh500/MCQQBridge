@@ -268,15 +268,18 @@ class ExternalHistory:
                                VALUES (%s,%s,%s,%s,%s,%s) ON DUPLICATE KEY UPDATE digest=mcqq_group_ai_memory.digest""", params)
             db.commit()
 
-    def recall(self, group, query, speaker=None, limit=3):
+    def recall(self, group, query, speaker=None, limit=3, *, include_mentions=True):
+        profiles = self.profile_names(group) if include_mentions else ()
         if self.mysql is None:
-            return self.local.recall(group, query, speaker, limit, names=self.profile_names(group))
+            return self.local.recall(group, query, speaker, limit, names=profiles,
+                                     include_mentions=include_mentions)
         names = {}
-        for member, name in self.profile_names(group):
+        for member, name in profiles:
             if len(name) >= 2 and name in query:
                 names.setdefault(name, set()).add(member)
         mentioned = {next(iter(ids)) for ids in names.values() if len(ids) == 1}
-        mentioned.update(re.findall(r"\b[0-9A-Fa-f]{32}\b", query))
+        if include_mentions:
+            mentioned.update(re.findall(r"\b[0-9A-Fa-f]{32}\b", query))
         targets = sorted({"", *mentioned} | ({speaker} if speaker else set()))
         placeholders = ",".join(["%s"] * len(targets))
         q = vector(query)

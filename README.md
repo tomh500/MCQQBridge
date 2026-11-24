@@ -8,6 +8,21 @@ QQ 官方机器人与 Minecraft 群服互通框架。Java 包与构建 Group ID 
 - `plugin`：BungeeCord 代理插件 MCQQBridge；聊天需要 BungeeChat，基岩关联需要 Floodgate。
 - `spigot`：Spigot 1.12.2+ 子服插件 MCQQSpigot；保留 `/said`，支持按群注册命令，提供异步存取接口。
 - `fabric`：可选图片客户端，[通用 Fabric 源码与构建说明](fabric/universal/README.md)；26.2、26.3 为重点支持版本，旧版为 legacy support。Forge 和 NeoForge 原生支持正在开发。
+- [`crossplay`](crossplay/README.md)：MasterGAL 跨端套件，可独立构建和安装。包含 BungeeCord 路由、Spigot 插件、Fabric 客户端、菜单适配器和 Bedrock 资源包。
+
+## 源码目录
+
+| 目录 | 内容 |
+| --- | --- |
+| `mcqq/`、`tests/` | QQ 机器人、HTTP API 及 Python 测试 |
+| `plugin/`、`spigot/` | QQ 桥的 BungeeCord 和 Spigot 插件 |
+| `fabric/`、`multiloader/` | QQ 桥客户端及各加载器的构建工程 |
+| `floodgate/` | Floodgate 账号关联集成 |
+| `crossplay/common/` | MasterGAL 共享协议、能力协商和协议测试 |
+| `crossplay/{bungee,spigot,fabric,menus,bedrock}/` | MasterGAL 各平台入口 |
+| `docs/`、`deploy/` | 运维说明与部署脚本 |
+
+## QQ 桥快速启动
 
 首次使用复制 `settings.example.yml` 为 `settings.yml`，填写自己的 QQ app_id、app_secret 和两个不同的随机服务 token（各至少32字符），安装 requirements.txt 后分别运行 `python -m mcqq.service` 与 `python -m mcqq.bot`。配置路径可由 `MCQQ_SETTINGS` 指定，相对路径以配置文件目录为基准。已有 JSON 仍受支持；未指定路径时优先读取 YAML。纯数字的 AppID、QQ 群号和其他标识请加引号，以免 YAML 将它们解析为数字。代理的 service-url 和 proxy-token 必须匹配；不要公开凭据、数据库和签名私钥。
 
@@ -61,6 +76,8 @@ QQ 开放平台 / QQ 群
 `/said 内容` 向出站列表中的群发送，并在允许的游戏子服广播。子服配置 `group-commands: {friends: "OPENID_A"}` 后，`/friends 内容` 只发送到目标群，同时在游戏内广播；重启生效。命令不能覆盖已有命令，权限为 mcqq.said。目标群需在授权及出站列表中。重复空格和标点保留，命令文本不会作为服务端命令执行。
 
 子服控制台也可使用 `/said 内容` 和 `group-commands` 中的自定义命令，以 Console 身份向游戏和 QQ 发言。需在子服 `remote` 配置本地 API 地址、与代理相同的 `proxy-token`、代理中的真实 `server-name`。
+
+BedWars1058 子服可以在 MCQQSpigot 启用 `features.bedwars-lobby-chat`。同时把该子服加入代理的 `chat-bridge.servers` 和 `chat-bridge.bedwars-lobby-servers`，并将它排除在 BungeeChat 自身的跨服聊天名单之外。QQ 消息只显示给未进入竞技场的玩家。大厅普通聊天发往出站群，`/said` 和群命令也只允许大厅玩家使用。竞技场内的队伍聊天和喊话由 BedWars1058 处理。
 
 - `/跨群信息` 查询目标群和 group_openid。`/跨群信息 [群名/别名] 内容` 定向发送，单词别名或 ID 可省略方括号。
 - `/跨群信息 ALL 内容` 广播到允许出站的其他群。省略目标时也按 ALL 发送，并在回执中提示如何指定目标。
@@ -143,11 +160,11 @@ group_ai_storage:
 
 ## 构建与升级
 
-代理运行 plugin/build.ps1；子服使用 Maven 3.9+ 执行 `mvn -f spigot/pom.xml package`，数据库驱动随子服 JAR 打包。源码构建需要服务器根目录 core 下的 BungeeCord.jar、spigot-1.12.2.jar 和 proxy 下的 BungeeChat JAR；Maven 可用 `-Dmcserver.root=绝对路径` 指定服务器根目录。输出分别为 mcqq-bridge-2.0.0.jar、mcqq-spigot-2.0.0.jar。
+从仓库根目录运行 `pwsh -File plugin/build.ps1 -BungeeJar /path/to/BungeeCord.jar -ChatJar /path/to/BungeeChat.jar` 构建代理插件。子服使用 Maven 3.9+，执行 `mvn -f spigot/pom.xml "-Dmcserver.root=/path/to/server-root" package`。该目录的 `core/` 中需要 `spigot-1.12.2.jar`，数据库驱动随子服 JAR 打包。构建产物分别位于 `plugin/target/` 和 `spigot/target/`。
 
 升级先备份并正常停止服务器，删除旧 qq-whitelist 和 mcqq-said JAR，放入新 JAR。代理首次启动自动复制 QQWhitelist 数据目录到 MCQQBridge；旧目录保留备份。子服旧 MCQQSaid 配置需要复制到 MCQQSpigot。切勿同时加载新旧插件。保留机器人 settings.json、bridge.json、数据库和服务器上的签名密钥。
 
-本项目提供源码和构建包；对外发布前应遵循所含第三方库和词库的许可。测试命令：`python -m unittest discover -s tests`，代理真实启动测试为 `python tests/proxy_smoke.py`。
+安装 `requirements.txt` 后，在仓库根目录运行 `python -m unittest discover -s tests`。涉及 MySQL 的用例需要显式配置一次性测试数据库。
 
 ## 独立 Python 发布包
 

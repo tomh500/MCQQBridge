@@ -1,0 +1,10 @@
+name: SpigotMasterGAL
+main: top.luotiany1.mcqq.crossplay.SpigotMasterGAL
+version: 0.3.0
+commands:
+  mastergalform:
+    description: Test a Bedrock form sent by the current server.
+    usage: /mastergalform
+  mastergalclient:
+    description: Request a version response from the current Fabric client.
+    usage: /mastergalclient

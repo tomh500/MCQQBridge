@@ -5,6 +5,8 @@
 features:
   # 是否允许 /said 和下面的群命令。/ Enable /said and group commands below.
   chat: true
+  # Restrict the bridge to players outside BedWars1058 arenas, including spectators.
+  bedwars-lobby-chat: false
 
 # 自定义命令名 -> QQ 官方 group_openid（不是数字群号）。/ Command name -> official group_openid, NOT QQ group number.
 # 例如把 {} 替换成下方两行，玩家即可 /friends 你好。/ Replace {} with the example to enable /friends hello.

@@ -4,7 +4,7 @@ import unittest
 from collections import OrderedDict
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 from aiohttp.test_utils import TestClient, TestServer
 from mcqq.bot import QQBot
@@ -327,6 +327,52 @@ class ChatTests(unittest.IsolatedAsyncioTestCase):
             group_openid='other', msg_type=7, content='【跨群信息｜一群】小明：',
             media={'file_info': 'uploaded-image'})
         bot.reply_group_text.assert_not_awaited()
+
+    async def test_cross_group_mode_skips_local_only_scope_and_keeps_normal_chat(self):
+        bot = self.cross_group_bot()
+        message = self.cross_group_message
+        await bot.on_group_message_create(message('start', '/跨群信息 临时全量模式 一群', group='other'))
+        bot.reply_group_text.reset_mock()
+
+        local = message('local', '在一群发言')
+        await bot.on_group_message_create(local)
+        bot.api.post_group_message.assert_not_awaited()
+        bot.reply_group_text.assert_not_awaited()
+        bot.relay_group.assert_awaited_once_with(local)
+
+        await bot.on_group_message_create(message('remote', '回到二群发言', group='other'))
+        bot.api.post_group_message.assert_awaited_once_with(
+            group_openid='group', msg_type=0, content='【跨群信息｜二群】小明：回到二群发言')
+
+    async def test_cross_group_sticker_caption_and_mentions(self):
+        bot = self.cross_group_bot()
+        message = self.cross_group_message
+        target, cached, unknown = 'A' * 32, 'B' * 32, 'C' * 32
+        history = SimpleNamespace(profile_name=Mock(side_effect=lambda group, member:
+            '芹菜' if (group, member) == ('other', cached) else ''))
+        await bot.on_group_message_create(message('start', '/跨群信息 临时全量模式 一群', group='other'))
+        bot.group_ai = SimpleNamespace(history=history, capture=AsyncMock())
+        bot.reply_group_text.reset_mock()
+        bot.api.post_group_file.return_value = {'file_info': 'uploaded-image'}
+        url = 'https://multimedia.nt.qq.com.cn/sticker'
+        raw = {'mentions': [{'member_openid': target, 'member_nickname': '对立酱'}],
+               'attachments': [{'content_type': 'image/png', 'url': url}]}
+        sticker = '<faceType=6,faceId="0",ext="eyJ0ZXh0IjoiIn0=">'
+        text = f'<@{target.lower()}> {sticker} <@!{cached}> <@{unknown}> 继续聊'
+        await bot.on_group_message_create(message('sticker', text, group='other', raw=raw))
+        bot.api.post_group_file.assert_awaited_once_with(group_openid='group', file_type=1, url=url)
+        bot.api.post_group_message.assert_awaited_once_with(
+            group_openid='group', msg_type=7,
+            content='【跨群信息｜二群】小明：[tag 对立酱] [表情包] [tag 芹菜] [tag 未知群成员] 继续聊',
+            media={'file_info': 'uploaded-image'})
+        bot.reply_group_text.assert_not_awaited()
+
+        await bot.on_group_message_create(message('mention-only', f'<@{cached}>', group='other'))
+        bot.api.post_group_message.assert_awaited_with(
+            group_openid='group', msg_type=0, content='【跨群信息｜二群】小明：[tag 芹菜]')
+        await bot.on_group_message_create(message('face-only', '{"faceType":6,"faceId":"0"}', group='other'))
+        bot.api.post_group_message.assert_awaited_with(
+            group_openid='group', msg_type=0, content='【跨群信息｜二群】小明：[表情包]')
 
     async def test_remote_command_requires_binding_and_backend_token(self):
         identity = dict(app_id='app', group_openid='group', member_openid='member', event_id='cmd1',
