@@ -138,6 +138,8 @@ group_ai_storage:
 
 在选定的 MySQL 数据库中，先用管理账号执行启用角色所需的建表脚本。`deploy/group_ai_full_mysql.sql` 包含历史、成员资料、附件、日报和 TTL 快取表；`deploy/group_ai_memory.sql` 创建向量记忆表；`deploy/group_command_quota.sql` 创建限额表。给运行账号授予所用表的 SELECT、INSERT、UPDATE 和必要的 DELETE 即可。Redis 账号需要对所选键前缀执行 GET 和 SETEX。
 
+升级既有 MySQL 日报表时，若 `mcqq_group_ai_daily` 尚无 `cutoff` 列，请先用管理账号执行 `ALTER TABLE mcqq_group_ai_daily ADD COLUMN cutoff DOUBLE NULL`，以便继续使用原有运行账号权限。
+
 从 SQLite 切换时先备份配置和数据库，停机器人后以目标配置运行 `python -m mcqq.migrate_group_storage`，查看逐项回读结果后再启动。可用 `--only history|memory|reports|quota` 分阶段切换。快取会自动重建，迁移不清除 SQLite 源记录。既有 SQLite 图片缓存仅导入仍可读取的文件。
 
 **编写插件。** 在 `mcqq/plugins` 配对提交 Python 处理器和同名 `.yml` 清单，并在注册表显式注册。YAML 的 `command` 声明 `name`、`category`、`schedule` 与参数类型 `mention` 或 `text`，`skill` 保存分析提示。异步处理器接收群上下文和该 YAML 配置，成功时可返回 PNG 字节。示例见 `member_intel.py` 与 `member_intel.yml`。

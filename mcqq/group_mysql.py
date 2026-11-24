@@ -1,6 +1,7 @@
 """MySQL implementations of chat history, daily-report state and optional TTL cache."""
 import hashlib
 import time
+from datetime import datetime, timedelta, timezone
 
 import pymysql
 
@@ -22,6 +23,14 @@ class MySQLGroupData:
             for role in roles:
                 for table in tables[role]:
                     cur.execute(f"SELECT 1 FROM {table} LIMIT 1")
+            if "reports" in roles:
+                cur.execute("SHOW COLUMNS FROM mcqq_group_ai_daily LIKE 'cutoff'")
+                if not cur.fetchone():
+                    try:
+                        cur.execute("ALTER TABLE mcqq_group_ai_daily ADD COLUMN cutoff DOUBLE NULL")
+                    except pymysql.err.OperationalError as error:
+                        if error.args[0] != 1060:  # Another process added the column.
+                            raise
 
     def rows(self, sql, args=()):
         with pymysql.connect(**self.options) as db, db.cursor() as cur:
@@ -145,13 +154,18 @@ class MySQLGroupData:
     def closed_day(self, group, day):
         return bool(self.rows("SELECT 1 FROM mcqq_group_ai_daily WHERE group_id=%s AND day=%s", (group, day)))
 
-    def store_report(self, group, day, images):
-        self.import_report(group, day, enumerate(images, 1))
+    def message_archived(self, group, created):
+        day = datetime.fromtimestamp(created, timezone(timedelta(hours=8))).date().isoformat()
+        return bool(self.rows("""SELECT 1 FROM mcqq_group_ai_daily WHERE group_id=%s
+            AND (cutoff > %s OR (cutoff IS NULL AND day=%s)) LIMIT 1""", (group, created, day)))
 
-    def import_report(self, group, day, pages):
+    def store_report(self, group, day, images, *, cutoff=None):
+        self.import_report(group, day, enumerate(images, 1), cutoff=cutoff)
+
+    def import_report(self, group, day, pages, *, cutoff=None):
         with pymysql.connect(**self.options) as db, db.cursor() as cur:
-            cur.execute("""INSERT INTO mcqq_group_ai_daily (group_id,day) VALUES (%s,%s)
-                           ON DUPLICATE KEY UPDATE day=mcqq_group_ai_daily.day""", (group, day))
+            cur.execute("""INSERT INTO mcqq_group_ai_daily (group_id,day,cutoff) VALUES (%s,%s,%s)
+                           ON DUPLICATE KEY UPDATE day=mcqq_group_ai_daily.day""", (group, day, cutoff))
             if cur.rowcount:
                 cur.executemany("""INSERT INTO mcqq_group_ai_daily_image (group_id,day,page,image)
                                    VALUES (%s,%s,%s,%s)""", [(group, day, page, image) for page, image in pages])

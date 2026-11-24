@@ -24,6 +24,10 @@ from .llm_context import chat_text, complete_json, context_batches
 MAX_IMAGE_BYTES = 200 * 1024 * 1024
 log = logging.getLogger(__name__)
 
+# Older report rows have no recorded cutoff and retain their calendar-day guard.
+ARCHIVED_MESSAGE = """SELECT 1 FROM group_ai_daily WHERE group_id=?
+    AND (cutoff > ? OR (cutoff IS NULL AND day=date(?, 'unixepoch', '+8 hours')))"""
+
 
 def vector(text):
     """Persist a compact lexical vector when the provider has no embedding endpoint."""
@@ -65,13 +69,15 @@ class History:
                     updated REAL NOT NULL, avatar_url TEXT NOT NULL DEFAULT '',
                     avatar_updated REAL NOT NULL DEFAULT 0, PRIMARY KEY(group_id,member_id));
                 CREATE TABLE IF NOT EXISTS group_ai_daily(
-                    group_id TEXT NOT NULL, day TEXT NOT NULL, PRIMARY KEY(group_id,day));
+                    group_id TEXT NOT NULL, day TEXT NOT NULL, cutoff REAL, PRIMARY KEY(group_id,day));
                 CREATE TABLE IF NOT EXISTS group_ai_daily_images(
                     group_id TEXT NOT NULL, day TEXT NOT NULL, page INTEGER NOT NULL,
                     image BLOB NOT NULL, PRIMARY KEY(group_id,day,page));
                 CREATE TABLE IF NOT EXISTS group_ai_daily_start(
                     group_id TEXT PRIMARY KEY, day TEXT NOT NULL);
             """)
+            if "cutoff" not in {row[1] for row in db.execute("PRAGMA table_info(group_ai_daily)")}:
+                db.execute("ALTER TABLE group_ai_daily ADD COLUMN cutoff REAL")
             columns = {row[1] for row in db.execute("PRAGMA table_info(group_ai_history)")}
             if "display_name" not in columns:
                 db.execute("ALTER TABLE group_ai_history ADD COLUMN display_name TEXT NOT NULL DEFAULT ''")
@@ -108,11 +114,11 @@ class History:
     def add(self, event_id, group, member, text, image_path=None, display_name="", created=None, avatar_url=""):
         created = time.time() if created is None else created
         with self.connect() as db:
-            inserted = db.execute("""INSERT OR IGNORE INTO group_ai_history
+            inserted = db.execute(f"""INSERT OR IGNORE INTO group_ai_history
                 (event_id,group_id,member_id,text,image_path,display_name,created,avatar_url) SELECT ?,?,?,?,?,?,?,?
-                WHERE NOT EXISTS(SELECT 1 FROM group_ai_daily WHERE group_id=?
-                    AND day=date(?, 'unixepoch', '+8 hours'))""",
-                (event_id, group, member, text, image_path, display_name[:80], created, avatar_url, group, created)).rowcount
+                WHERE NOT EXISTS({ARCHIVED_MESSAGE})""",
+                (event_id, group, member, text, image_path, display_name[:80], created, avatar_url,
+                 group, created, created)).rowcount
             if inserted and display_name and member != "__bot__":
                 db.execute("""INSERT INTO group_ai_profiles(group_id,member_id,display_name,updated) VALUES (?,?,?,?)
                     ON CONFLICT(group_id,member_id) DO UPDATE SET display_name=excluded.display_name,updated=excluded.updated
@@ -159,7 +165,8 @@ class History:
     def stage_day(self, group, day, cutoff, summary, images, *, prune_raw=True):
         with self.image_lock:
             with self.connect() as db:
-                inserted = db.execute("INSERT OR IGNORE INTO group_ai_daily VALUES (?,?)", (group, day)).rowcount
+                inserted = db.execute("INSERT OR IGNORE INTO group_ai_daily (group_id,day,cutoff) VALUES (?,?,?)",
+                                      (group, day, cutoff)).rowcount
                 if not inserted:
                     return
                 db.executemany("INSERT INTO group_ai_daily_images VALUES (?,?,?,?)",
@@ -176,8 +183,12 @@ class History:
         with self.connect() as db:
             return bool(db.execute("SELECT 1 FROM group_ai_daily WHERE group_id=? AND day=?", (group, day)).fetchone())
 
-    def store_report(self, group, day, images):
-        self.stage_day(group, day, 0.0, "", images, prune_raw=False)
+    def message_archived(self, group, created):
+        with self.connect() as db:
+            return bool(db.execute(ARCHIVED_MESSAGE, (group, created, created)).fetchone())
+
+    def store_report(self, group, day, images, *, cutoff=None):
+        self.stage_day(group, day, cutoff, "", images, prune_raw=False)
 
     def staged_report(self, group, day):
         with self.connect() as db:
@@ -433,6 +444,8 @@ class GroupAI:
             return "对话服务暂时无法回应，请稍后再试。"
         lock = self.locks.setdefault(group, asyncio.Lock())
         async with lock:
+            if time.monotonic() < self.unavailable_until:
+                return "对话服务暂时无法回应，请稍后再试。"
             past, recalled = await asyncio.gather(asyncio.to_thread(self.history.recent, group, 12),
                                                   asyncio.to_thread(self.history.recall, group, prompt, speaker),
                                                   return_exceptions=True)
@@ -455,10 +468,15 @@ class GroupAI:
             if not past or past[-1][0] != speaker or self.check(
                     re.sub(r"^<@!?[^>]+>\s*", "", past[-1][1]).strip()) != prompt:
                 messages.append({"role": "user", "content": prompt})
-            if not self.feature_policy.check(group, 'llm', consume=False)['allowed']:
-                return '维护中暂不可用。'
             try:
-                answer = await self.complete(messages, max_tokens=int(self.config.get("max_tokens", 500)))
+                max_tokens = int(self.config.get("max_tokens", 500))
+                verdict = await asyncio.to_thread(self.feature_policy.check, group, 'llm', consume=True)
+                if not verdict['allowed']:
+                    return '维护中暂不可用。'
+                answer = await self.complete(messages, max_tokens=max_tokens)
+            except sqlite3.Error:
+                log.exception("Group chat rate limit check failed")
+                return "对话服务暂时无法回应，请稍后再试。"
             except (aiohttp.ClientError, asyncio.TimeoutError, ValueError, KeyError, IndexError):
                 self.unavailable_until = time.monotonic() + 60
                 return "对话服务暂时无法回应，请稍后再试。"

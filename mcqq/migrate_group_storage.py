@@ -50,10 +50,12 @@ def mysql_history(source, sink, copied):
 
 
 def mysql_reports(source, store, copied):
-    for group, day in source.execute("SELECT group_id,day FROM group_ai_daily"):
+    columns = {row[1] for row in source.execute("PRAGMA table_info(group_ai_daily)")}
+    cutoff_column = "cutoff" if "cutoff" in columns else "NULL"
+    for group, day, cutoff in source.execute(f"SELECT group_id,day,{cutoff_column} FROM group_ai_daily"):
         pages = source.execute("""SELECT page,image FROM group_ai_daily_images
                                   WHERE group_id=? AND day=? ORDER BY page""", (group, day)).fetchall()
-        store.import_report(group, day, pages)
+        store.import_report(group, day, pages, cutoff=cutoff)
         if store.staged_report(group, day) != (True, pages):
             raise RuntimeError("MySQL staged report readback differs from SQLite")
         copied["reports"] += 1

@@ -2,16 +2,18 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta
 import json
+import sqlite3
 from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 from PIL import Image
 
 from mcqq.bot import QQBot
-from mcqq.group_ai import GroupAI
+from mcqq.group_ai import GroupAI, History
 from mcqq.group_reports import BEIJING, DailyReports
+from mcqq.group_storage import ExternalHistory
 
 
 class DailyReportTests(unittest.IsolatedAsyncioTestCase):
@@ -134,8 +136,42 @@ class DailyReportTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(draw.call_args.args[6][0][0], "23:50 – 03:50")
         self.assertEqual(draw.call_args.args[6][-1][0], "19:50 – 23:50")
         self.assertTrue(self.ai.history.closed_day("one", end.date().isoformat()))
+        self.add("late", "one", "alice", "Before but delivered late", end - self.start - timedelta(seconds=1))
+        self.add("boundary", "one", "carol", "Delivered at cutoff", end - self.start)
+        self.add("after", "one", "dave", "Delivered after cutoff", end - self.start + timedelta(seconds=1))
+        self.assertEqual(self.ai.history.day("one", start.timestamp(), end.timestamp()), [])
         next_rows = self.ai.history.day("one", end.timestamp(), (end + timedelta(days=1)).timestamp())
-        self.assertEqual([row[1] for row in next_rows], ["bob"])
+        self.assertEqual([row[1] for row in next_rows], ["bob", "carol", "dave"])
+
+    def test_external_history_checks_persisted_cutoff_before_writing(self):
+        local = self.ai.history
+        external = ExternalHistory({}, local)
+        external.raw_sql = Mock()
+        end = self.start + timedelta(hours=23, minutes=50)
+        cutoff = end.timestamp()
+        external.stage_day("one", end.date().isoformat(), cutoff, "", [b"report"])
+        external.raw_sql.remove_history.assert_called_once_with(cutoff, group="one")
+
+        reopened = ExternalHistory({}, History(local.database, local.image_dir))
+        reopened.raw_sql = external.raw_sql
+        reopened.add("late", "one", "alice", "Late", created=cutoff - 1)
+        reopened.add("new", "one", "bob", "New", created=cutoff)
+        reopened.raw_sql.add.assert_called_once_with("new", "one", "bob", "New", None, "", cutoff, "")
+
+    def test_upgrades_legacy_sqlite_report_without_losing_delivery_state(self):
+        local = self.ai.history
+        path = Path(local.database).with_name("legacy.db")
+        day = self.start.date().isoformat()
+        with sqlite3.connect(path) as db:
+            db.execute("CREATE TABLE group_ai_daily(group_id TEXT, day TEXT, PRIMARY KEY(group_id,day))")
+            db.execute("INSERT INTO group_ai_daily VALUES ('one',?)", (day,))
+        db.close()
+        history = History(str(path), local.image_dir)
+        self.assertEqual(history.staged_report("one", day), (True, []))
+        cutoff = (self.start + timedelta(days=1)).timestamp()
+        history.add("late", "one", "alice", "Legacy day", created=cutoff - 1)
+        history.add("new", "one", "alice", "Next day", created=cutoff)
+        self.assertEqual([row[3] for row in history.day("one", cutoff - 2, cutoff + 1)], ["Next day"])
 
     async def test_manual_downgrade_and_cutoff_render_png(self):
         self.ai.complete = AsyncMock(side_effect=ValueError("bad provider response"))
