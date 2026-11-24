@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.IntConsumer;
 import org.bukkit.ChatColor;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -21,12 +22,16 @@ import top.luotiany1.mcqq.crossplay.SpigotMasterGAL;
 /** Optional reflective hook: ChestCommands stays a soft dependency and owns its click actions. */
 final class ChestCommandsMenuBridge implements Listener {
     private final JavaPlugin plugin;
-    private final SpigotMasterGAL masterGal;
+    private final MenuDispatcher dispatcher;
     private final Set<java.util.UUID> openingNativeMenu = new HashSet<>();
 
     ChestCommandsMenuBridge(JavaPlugin plugin, SpigotMasterGAL masterGal) {
+        this(plugin, masterGal::showMenu);
+    }
+
+    ChestCommandsMenuBridge(JavaPlugin plugin, MenuDispatcher dispatcher) {
         this.plugin = plugin;
-        this.masterGal = masterGal;
+        this.dispatcher = dispatcher;
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -62,7 +67,7 @@ final class ChestCommandsMenuBridge implements Listener {
             buttons.add(new GalMenu.Button("下一页"));
         }
         String title = String.valueOf(invoke(menu, "getTitle"));
-        if (masterGal.showMenu(player, new GalMenu(clean(title), "选择菜单项目。", buttons), result -> {
+        if (dispatcher.showMenu(player, new GalMenu(clean(title), "选择菜单项目。", buttons), result -> {
             if (result == GalMenu.UNAVAILABLE) {
                 openNative(player, menuView);
             } else if (result >= 0 && result < firstPage.size()) {
@@ -72,9 +77,8 @@ final class ChestCommandsMenuBridge implements Listener {
                 openPage(player, menuView, slots, 14, title);
             }
         })) {
-            return;
+            event.setCancelled(true);
         }
-        event.setCancelled(true);
     }
 
     private void openPage(Player player, Object menuView, List<Integer> slots, int offset, String title) {
@@ -86,7 +90,7 @@ final class ChestCommandsMenuBridge implements Listener {
         if (offset + current.size() < slots.size()) {
             buttons.add(new GalMenu.Button("下一页"));
         }
-        masterGal.showMenu(player, new GalMenu(clean(title), "选择菜单项目。", buttons), result -> {
+        if (!dispatcher.showMenu(player, new GalMenu(clean(title), "选择菜单项目。", buttons), result -> {
             if (result == GalMenu.UNAVAILABLE) {
                 openNative(player, menuView);
             } else if (result >= 0 && result < current.size()) {
@@ -98,7 +102,9 @@ final class ChestCommandsMenuBridge implements Listener {
                     && offset + current.size() < slots.size()) {
                 openPage(player, menuView, slots, offset + 14, title);
             }
-        });
+        })) {
+            openNative(player, menuView);
+        }
     }
 
     private List<GalMenu.Button> render(Player player, Object menuView, List<Integer> slots) {
@@ -181,5 +187,10 @@ final class ChestCommandsMenuBridge implements Listener {
     private String clean(String text) {
         String clean = ChatColor.stripColor(ChatColor.translateAlternateColorCodes('&', text == null ? "" : text));
         return clean.replace('\n', ' ').replace('\r', ' ');
+    }
+
+    @FunctionalInterface
+    interface MenuDispatcher {
+        boolean showMenu(Player player, GalMenu menu, IntConsumer onResult);
     }
 }
