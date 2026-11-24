@@ -18,6 +18,16 @@ public final class MasterGALMenusPlugin extends JavaPlugin {
         SpigotMasterGAL masterGal = (SpigotMasterGAL) masterGalPlugin;
         getServer().getPluginManager().registerEvents(new ChestCommandsMenuBridge(this, masterGal), this);
 
+        Plugin gadgets = getServer().getPluginManager().getPlugin("GadgetsMenu");
+        if (gadgets != null && gadgets.isEnabled()) {
+            try {
+                getServer().getPluginManager().registerEvents(new GadgetsMenuBridge(gadgets, masterGal), this);
+                getLogger().info("GadgetsMenu Bedrock main menu adapter registered.");
+            } catch (ReflectiveOperationException | LinkageError failure) {
+                getLogger().warning("GadgetsMenu Bedrock adapter unavailable; native menus remain enabled.");
+            }
+        }
+
         Plugin bedWars = getServer().getPluginManager().getPlugin("BedWars1058");
         if (bedWars != null) {
             try {
@@ -26,7 +36,8 @@ public final class MasterGALMenusPlugin extends JavaPlugin {
                 Constructor<?> constructor = adapterClass.getConstructor(Plugin.class, SpigotMasterGAL.class,
                         Plugin.class);
                 Object adapter = constructor.newInstance(this, masterGal, bedWars);
-                getServer().getPluginManager().registerEvents((org.bukkit.event.Listener) adapter, this);
+                adapterClass.getMethod("register").invoke(adapter);
+                getLogger().info("BedWars shop adapter registered.");
             } catch (ReflectiveOperationException | LinkageError failure) {
                 getLogger().warning("BedWars menu adapter is unavailable; native BedWars shops remain enabled.");
             }
