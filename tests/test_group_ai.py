@@ -43,6 +43,11 @@ class GroupAITests(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(await ai.reply(group, "你好", speaker), "嗯，知道了。")
                 with patch.object(ai.feature_policy, "check", return_value={"allowed": False}):
                     self.assertEqual(await ai.reply("group", "你好", "member"), "维护中暂不可用。")
+                with patch.object(ai.feature_policy, "check", side_effect=[
+                    {"allowed": True}, {"allowed": False, "reason": "rate"},
+                ]) as check:
+                    self.assertEqual(await ai.reply("group", "你好", "member"), "维护中暂不可用。")
+                    self.assertEqual([call.kwargs["consume"] for call in check.call_args_list], [False, True])
                 self.assertEqual(len(requests), 4)
                 self.assertEqual(requests[0], requests[1])
                 self.assertEqual(len({request["session_id"] for request in requests}), 3)
