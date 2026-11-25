@@ -1,6 +1,7 @@
 name: SpigotMasterGAL
 main: top.luotiany1.mcqq.crossplay.SpigotMasterGAL
-version: 0.3.0
+version: 0.4.0
+description: SpigotMaster-GAL backend for Minecraft cross-edition menus and messaging.
 commands:
   mastergalform:
     description: Test a Bedrock form sent by the current server.

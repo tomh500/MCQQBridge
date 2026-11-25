@@ -1,0 +1,5 @@
+# List only audited button-only ChestCommands menu filenames, including .yml.
+chestcommands-form-menus: []
+
+# Bedrock form for the GadgetsMenu main menu on this backend.
+gadgetsmenu-main-form: true

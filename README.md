@@ -8,7 +8,7 @@ QQ 官方机器人与 Minecraft 群服互通框架。Java 包与构建 Group ID 
 - `plugin`：BungeeCord 代理插件 MCQQBridge；聊天需要 BungeeChat，基岩关联需要 Floodgate。
 - `spigot`：Spigot 1.12.2+ 子服插件 MCQQSpigot；保留 `/said`，支持按群注册命令，提供异步存取接口。
 - `fabric`：可选图片客户端，[通用 Fabric 源码与构建说明](fabric/universal/README.md)；26.2、26.3 为重点支持版本，旧版为 legacy support。Forge 和 NeoForge 原生支持正在开发。
-- [`crossplay`](crossplay/README.md)：MasterGAL 跨端套件，可独立构建和安装。包含 BungeeCord 路由、Spigot 插件、Fabric 客户端、菜单适配器和 Bedrock 资源包。
+- [SpigotMaster-GAL、BungeeMaster-GAL、FabricMaster-GAL](crossplay/README.md) 提供 Minecraft 跨端事件、请求与界面能力，各组件可独立构建和安装。
 
 ## 源码目录
 
@@ -19,7 +19,7 @@ QQ 官方机器人与 Minecraft 群服互通框架。Java 包与构建 Group ID 
 | `fabric/`、`multiloader/` | QQ 桥客户端及各加载器的构建工程 |
 | `floodgate/` | Floodgate 账号关联集成 |
 | `crossplay/common/` | MasterGAL 共享协议、能力协商和协议测试 |
-| `crossplay/{bungee,spigot,fabric,menus,bedrock}/` | MasterGAL 各平台入口 |
+| `crossplay/{bungee,spigot,fabric,menus,bedrock}/` | Minecraft 插件、Mod、菜单适配器与资源包源码 |
 | `docs/`、`deploy/` | 运维说明与部署脚本 |
 
 ## QQ 桥快速启动

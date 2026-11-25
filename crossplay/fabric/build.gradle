@@ -11,7 +11,7 @@ if (!apiVersions.containsKey(target)) {
 
 layout.buildDirectory.set(layout.projectDirectory.dir("build/${target}"))
 group = 'top.luotiany1'
-version = "0.3.0+${target}"
+version = "0.3.1+${target}"
 base { archivesName = 'FabricMasterGAL' }
 repositories { mavenCentral() }
 
@@ -36,6 +36,6 @@ processResources {
     inputs.property 'version', project.version
     inputs.property 'minecraftTarget', target
     filesMatching('fabric.mod.json') {
-        expand(version: project.version, minecraftTarget: target)
+        expand(version: project.version, minecraftTarget: target, api: apiVersions[target])
     }
 }

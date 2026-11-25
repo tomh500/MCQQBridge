@@ -16,15 +16,23 @@ public final class MasterGALMenusPlugin extends JavaPlugin {
             return;
         }
         SpigotMasterGAL masterGal = (SpigotMasterGAL) masterGalPlugin;
-        getServer().getPluginManager().registerEvents(new ChestCommandsMenuBridge(this, masterGal), this);
+        saveDefaultConfig();
+        Plugin chestCommands = getServer().getPluginManager().getPlugin("ChestCommands");
+        if (chestCommands != null && chestCommands.isEnabled()) {
+            try {
+                getServer().getPluginManager().registerEvents(
+                        new ChestCommandsMenuBridge(this, masterGal, chestCommands), this);
+            } catch (ReflectiveOperationException | LinkageError failure) {
+                getLogger().warning("ChestCommands menu adapter unavailable; native menus remain enabled.");
+            }
+        }
 
         Plugin gadgets = getServer().getPluginManager().getPlugin("GadgetsMenu");
-        if (gadgets != null && gadgets.isEnabled()) {
+        if (gadgets != null && gadgets.isEnabled() && getConfig().getBoolean("gadgetsmenu-main-form", true)) {
             try {
                 getServer().getPluginManager().registerEvents(new GadgetsMenuBridge(gadgets, masterGal), this);
-                getLogger().info("GadgetsMenu Bedrock main menu adapter registered.");
             } catch (ReflectiveOperationException | LinkageError failure) {
-                getLogger().warning("GadgetsMenu Bedrock adapter unavailable; native menus remain enabled.");
+                getLogger().warning("GadgetsMenu menu adapter unavailable; native menus remain enabled.");
             }
         }
 

@@ -1,17 +1,19 @@
 # FabricMaster-GAL 开发者文档
 
+参阅 [SpigotMaster 事件迁移矩阵](EventCompatibility.md) 了解三段地址和结构化事件入口。
+
 ## 适用版本
 
-| 维护线 | 0.3.0 发行包 | 构建时采用的 Fabric API |
+| 维护线 | 0.3.1 构建包 | 构建时采用的 Fabric API |
 | --- | --- | --- |
-| 26.3 及以上，跟随最新正式版 | `FabricMasterGAL-0.3.0+26.3.jar`，仅匹配 Minecraft 26.3 | `0.165.0+26.3` |
-| 26.2 及以下，兼容线 | `FabricMasterGAL-0.3.0+26.2.jar`，仅匹配 Minecraft 26.2 | `0.161.0+26.2` |
+| 26.3 | `FabricMasterGAL-0.3.1+26.3.jar`，仅匹配 Minecraft 26.3 | `0.165.0+26.3` |
+| 26.2 | `FabricMasterGAL-0.3.1+26.2.jar`，仅匹配 Minecraft 26.2 | `0.161.0+26.2` |
 
-两包均为纯客户端 Mod，模组 ID 为 `fabricmastergal`，要求 **Java 25** 和 **Fabric Loader 0.19.5 或更新版本**。运行时需要 Fabric API 的 Networking、Client Command 和 Lifecycle Events 模块，安装对应 Minecraft 版本的完整 Fabric API 即可。前表是已构建的目标，26.2 之前和 26.3 之后的其他游戏版本需要单独适配与构建。
+两包均为纯客户端 Mod，模组 ID 为 `fabricmastergal`，要求 **Java 25** 和 **Fabric Loader 0.19.5 或更新版本**。运行时需要 Fabric API 的 Networking、Client Command 和 Lifecycle Events 模块，安装表中对应 Minecraft 版本的完整 Fabric API 即可。Mod 元数据声明本目标构建和验证过的三个模块版本下限。前表是已构建的目标，26.2 之前和 26.3 之后的其他游戏版本需要单独适配与构建。
 
-两个版本都完成了构建和协议客户端经 Bungee 到 Spigot **1.12.2、26.2** 的往返验证。26.3 协议还验证了换服时重新协商。该结果涵盖协议路径，真实 Fabric 客户端里的界面与控制操作仍需验收。命令和网络 API 在两套游戏版本间共用。输入集成另按游戏版本选择对应 API，Minecraft 26.3 起使用 SDL3。[Mojang 26.3 更新说明](https://www.minecraft.net/en-us/article/minecraft-java-edition-26-3)
+0.3.1 在 JDK 25、Gradle 9.6.1 和 Loom 1.17.21 构建两个目标。较早版本曾经用协议客户端验证 Bungee 至 Spigot **1.12.2、26.2** 的往返，26.3 协议也验证了换服重新协商。0.3.1 的真实客户端界面与控制操作仍待验收。命令和网络 API 在两套游戏版本间共用。输入集成另按游戏版本选择对应 API，Minecraft 26.3 起使用 SDL3。[Mojang 26.3 更新说明](https://www.minecraft.net/en-us/article/minecraft-java-edition-26-3)
 
-从 0.3.0 起，客户端也支持 MasterGAL 服务端菜单动作：服务器最多传 16 个按钮，Mod 绘制为原生 Screen，再只回传按钮序号。界面允许在游戏窗口本地绘制，服务端仍需把选择映射到自己的权限、价格、库存与对局校验。这个动作是可选的，未安装新版 Mod 的玩家继续看到原版容器菜单。0.3.0 仍使用 BungeeMasterGAL 0.2.0 的通用事件转发。
+从 0.3.0 起，客户端也支持 MasterGAL 服务端菜单动作：服务器最多传 16 个按钮，Mod 绘制为原生 Screen，再只回传按钮序号。界面允许在游戏窗口本地绘制，服务端仍需把选择映射到自己的权限、价格、库存与对局校验。客户端处理 Screen 的绘制、输入、关闭和会话清理。BedWars1058 与 ChestCommands 的 Java 入口继续使用插件库存。该动作继续复用 BungeeMasterGAL 0.2.0 引入的通用事件转发。
 
 ## 把 MasterGAL 加入你的 Mod
 
@@ -21,7 +23,7 @@
 
 ```groovy
 dependencies {
-implementation files('libs/FabricMasterGAL-0.3.0+26.3.jar')
+implementation files('libs/FabricMasterGAL-0.3.1+26.3.jar')
 }
 ```
 

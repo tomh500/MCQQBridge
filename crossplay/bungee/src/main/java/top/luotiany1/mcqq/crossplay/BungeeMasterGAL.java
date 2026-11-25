@@ -238,6 +238,10 @@ public final class BungeeMasterGAL extends Plugin implements Listener {
     @EventHandler
     public void onSwitch(ServerSwitchEvent event) {
         ProxiedPlayer player = event.getPlayer();
+        Server current = player.getServer();
+        if (current != null && FloodgateApi.getInstance().isFloodgatePlayer(player.getUniqueId())) {
+            current.sendData(BedrockForm.CHANNEL, BedrockForm.AVAILABLE);
+        }
         Server previous = galSessions.get(player);
         if (previous != null && previous != player.getServer() && galSessions.remove(player, previous)) {
             player.sendData(GalPacket.CLIENT_CHANNEL, GalPacket.reset());
