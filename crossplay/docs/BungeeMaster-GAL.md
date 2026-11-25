@@ -39,5 +39,5 @@ Fabric 发 HELLO 公布可接收的动作，代理将其转发给当前后端。
 
 - 确认代理启动日志中 Geyser、Floodgate 和 BungeeMasterGAL 已加载。只用 Java 端进行开发时，BungeeMasterGAL 依然要求代理安装 Floodgate。
 - 用 Fabric 的 `/crossplayevent` 与后端的 `/mastergalclient` 验证双向事件和请求。换服时分别确认新旧后端是否安装对应业务插件，并在新后端等待重新协商。
-- 基岩玩家执行 `/crossplay` 会打开世界查询表单。用 `/mastergalform` 验证 Spigot 到代理再到客户端的表单路径及回调。测试资源包读取、UDP 握手和游戏中表单点击是三个独立检查。
+- 基岩玩家执行 `/crossplay` 会打开世界查询表单。用 `/mastergalform` 验证 Spigot 到代理再到客户端的表单路径及回调。分别检查资源包读取、传输连接和游戏内的表单点击。基岩 26.60 起需要 NetherNet，Geyser 的基岩监听地址应按 NetherNet 网络要求配置。 [Geyser NetherNet 排查](https://geysermc.org/blog/preparing-for-nethernet/)
 - 只在部分后端失败时，检查当前路由、ViaVersion/ViaBackwards 的版本链和目标后端注册的能力。资源包放置位置及图标路径见 [BedrockPack](BedrockPack.md)。

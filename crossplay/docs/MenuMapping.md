@@ -34,4 +34,4 @@ GadgetsMenu 的 `gadgetsmenu-main-form` 默认开启，缺省配置也沿用此�
 4. 在菜单打开时切换后端、换世界、打开其他库存，或由管理员撤销 ChestCommands 开放权限并重载配置。确认旧按钮没有副作用。分别核对主动关闭、断开和派发失败时的表现。
 5. 用最小 UI 缩放空间和高 GUI 缩放验证业务插件显式打开的 Fabric Screen，并检查键盘、鼠标、关闭和换服。26.3 的 SDL3 输入能力按具体客户端 API 适配。
 
-服务端产物与依赖版本来自本地检出和本地 JAR。隔离的 Spigot 1.12.2 已用 Java 协议客户端验证 ChestCommands 原生库存打开和图标动作。另用 BedWars1058 21.11.2 和 GadgetsMenu 4.5.4 在隔离服右键实际发放的大厅箱子，验证 Java 原生打开，以及注入表单能力后的主菜单映射、原生分类、普通箱子、原版回退和关闭。步骤 2–5 的完整交互需在隔离测试服用实际客户端验收。
+服务端产物与依赖版本来自本地检出和本地 JAR。隔离的 Spigot 1.12.2 已用 Java 协议客户端验证 ChestCommands 原生库存打开和图标动作。另用 BedWars1058 21.11.2 和 GadgetsMenu 4.5.4 在隔离服右键实际发放的大厅箱子，验证 Java 原生打开，以及注入表单能力后的主菜单映射、原生分类、普通箱子、原版回退和关闭。隔离 BungeeCord 和两个 Spigot 后端也用 Java 1.12.2 协议客户端验证了请求往返、换服重置和重新协商。基岩 26.65 的真实连接仍待在支持 NetherNet 的测试环境验收。 [Geyser NetherNet 配置](https://geysermc.org/wiki/geyser/setup/)

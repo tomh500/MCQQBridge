@@ -22,7 +22,7 @@
 
 可选的 `MasterGALMenus` 将通过代理确认身份的基岩玩家引导到 BedWars1058 的快捷购买、商品类别和 GadgetsMenu 主菜单表单。GadgetsMenu 的各分类、购买和神秘箱继续使用原生库存。管理员可按文件启用已审计的 ChestCommands 按钮菜单。Java 客户端（包括 Fabric）继续使用这些插件的库存菜单。业务插件仍可用 `showMenu` 提供专门设计的 Fabric Screen。
 
-典型拓扑在 BungeeCord 代理开放 Java TCP 25565 和 Geyser Bedrock UDP 19132。为大厅、生存等后端分别配置代理路由。同机部署时后端可监听本机回环地址。Geyser 和 Floodgate 安装在代理层，由代理处理基岩身份和表单回调，可使用 `send-floodgate-data: false`。
+典型拓扑在 BungeeCord 代理开放 Java TCP 25565。基岩 26.60 起使用 NetherNet。采用 Geyser 内置信令时，基岩端口通常同时使用 TCP 和 UDP，默认端口为 19132。为大厅、生存等后端分别配置代理路由，同机后端可监听回环地址。Geyser 和 Floodgate 安装在代理层处理基岩身份和表单回调，可使用 `send-floodgate-data: false`。 [Geyser NetherNet 配置](https://geysermc.org/wiki/geyser/setup/)
 
 ## Fabric 构建目标
 
