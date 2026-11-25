@@ -20,6 +20,7 @@ from .config import load
 from . import command_quota, launcher
 from botpy.message import GroupMessage
 from . import media
+from . import chat_mentions
 from . import status_bot
 from . import system_info
 from . import reply_controls
@@ -370,6 +371,18 @@ class QQBot(botpy.Client):
         except (aiohttp.ClientError, asyncio.TimeoutError, ValueError, KeyError):
             await self.reply_group_text(message, "重置暂时无法使用，请稍后再试。")
 
+    async def deliver_game_chat(self, item):
+        group = item["group"]
+        markdown = await chat_mentions.markdown_for(self, item)
+        if markdown is not None:
+            # An uncertain send result must use the normal queue retry, not a second format.
+            await self.api.post_group_message(group_openid=group, msg_type=2, markdown=markdown)
+        else:
+            text = item["text"]
+            if chat_mentions.configured(self.settings):
+                text = chat_mentions.plain(plain_game_output(text))
+            await self.send_group_text(group, text, translate=False)
+
     async def chat_delivery(self):
         delivered = set()
         while True:
@@ -378,7 +391,7 @@ class QQBot(botpy.Client):
                 for item in result.get("messages", []):
                     if item["id"] not in delivered:
                         # No msg_id: this is an active group message, requiring QQ permission/quota.
-                        await self.send_group_text(item["group"], item["text"], translate=False)
+                        await self.deliver_game_chat(item)
                         delivered.add(item["id"])
                     await self.call_service("/v1/chat/ack-qq", {"ids": [item["id"]]})
                 if len(delivered) > 4096:
