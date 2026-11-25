@@ -1,16 +1,18 @@
 # SpigotMaster-GAL 开发者文档
 
+参阅 [SpigotMaster 事件迁移矩阵](EventCompatibility.md) 了解三段地址和结构化事件入口。
+
 ## 适用版本
 
-本文对应 **SpigotMasterGAL 0.3.0**。后端已用 Spigot **1.12.2** 和 **26.2** 完成 Java 协议往返测试。JAR 使用 Java 8 字节码，运行时仍须符合所选 Spigot 核心的要求，测试中分别使用了 Java 8 和 Java 25。Fabric 端已有 **26.2、26.3** 两个构建，接入旧后端时仍需能转换对应 Minecraft 协议的 Via 组件。Bedrock 表单经 BungeeMasterGAL **0.2.0**、Geyser 和 Floodgate 转接，实机按钮验收仍待完成。0.3.0 新增菜单消息，复用 0.2.0 通用信道，代理不需要升级。
+本文对应 **SpigotMasterGAL 0.4.0**。后端已用 Spigot **1.12.2** 和 **26.2** 完成 Java 协议往返测试。JAR 使用 Java 8 字节码，运行时仍须符合所选 Spigot 核心的要求，测试中分别使用了 Java 8 和 Java 25。Fabric 端已有 **26.2、26.3** 两个构建，接入旧后端时仍需能转换对应 Minecraft 协议的 Via 组件。Bedrock 表单经 BungeeMasterGAL **0.3.0**、Geyser 和 Floodgate 转接，实机按钮验收仍待完成。代理每次进服或换服都重新确认基岩表单能力。
 
 ## 安装与编译依赖
 
-将 `SpigotMasterGAL-0.3.0.jar` 放入每个需要接入的后端 `plugins/`。业务插件编译时依赖发行 JAR，运行时由 Bukkit 加载已安装的插件，避免把 MasterGAL 打进业务插件 JAR。
+将 `SpigotMasterGAL-0.4.0.jar` 放入每个需要接入的后端 `plugins/`。业务插件编译时依赖发行 JAR，运行时由 Bukkit 加载已安装的插件，避免把 MasterGAL 打进业务插件 JAR。
 
 ```groovy
 dependencies {
-    compileOnly files('libs/SpigotMasterGAL-0.3.0.jar')
+    compileOnly files('libs/SpigotMasterGAL-0.4.0.jar')
 }
 ```
 
@@ -29,9 +31,11 @@ dependencies {
 | `sendEvent(Player, String, byte[])` | 对端公布对应能力时发出事件。返回 `false` 表示当前会话无法发出，`true` 只表示已提交传输 |
 | `request(Player, String, byte[])` | 返回 `CompletableFuture<byte[]>`。对端拒绝、能力不可用、传输失败、待处理数达到上限、超时或会话结束时以异常完成 |
 
-服务端额外提供 `showMenu(Player, GalMenu, IntConsumer)`：1 至 16 个有标签按钮，结果回调与表单一样从 0 开始，另有 `GalMenu.CLOSED` 和 `GalMenu.UNAVAILABLE`。最新版 FabricMasterGAL 通过可选能力 `mastergal:menu_open` 显示 Minecraft 原生 Screen，再以 `mastergal:menu_result` 回传按钮序号。旧版客户端没有该能力时此方法会尝试 Floodgate 表单；Java 旧客户端最终得到 `UNAVAILABLE`，调用方应打开原版库存菜单。此方法及新动作是新增兼容项，不改变 0.2.0 的既有 GalApi 签名或数据包编码。表单和自定义 Screen 都只传递按钮选择，不授予客户端修改服务器状态的权限。
+服务端额外提供 `showMenu(Player, GalMenu, IntConsumer)`：1 至 16 个有标签按钮，结果回调与表单一样从 0 开始，另有 `GalMenu.CLOSED` 和 `GalMenu.UNAVAILABLE`。最新版 FabricMasterGAL 通过可选能力 `mastergal:menu_open` 显示 Minecraft 原生 Screen，再以 `mastergal:menu_result` 回传按钮序号。已确认 Floodgate 身份的玩家可以接收表单。无法派发时同步返回 `false`，原入口可继续开启库存。
 
-使用自己的命名空间，例如 `examplegal:catalog`。动作名最长 80 个 ASCII 字符，完整格式为 `[a-z0-9_.-]+:[a-z0-9_./-]+`。每个端点最多 64 个不同动作名。同名动作可以分别注册事件和请求，同类处理器重复注册会抛出异常。0.3.0 暂无公开注销或向现有会话主动刷新能力的接口，建议在初始化阶段完成注册。
+既有库存适配器调用 `supportsBedrockForms(Player)` 和 `showBedrockMenu(Player, GalMenu, IntConsumer)`，确保 Java 客户端直接走库存。表单选择由当前后端待处理表单 ID 和按钮范围匹配，随后消费该次回调。关闭属于取消。离开后端、换世界或成功打开其他库存后，旧回调作废。点击时由业务插件再次确认开放权限、当前菜单及交易条件。
+
+使用自己的命名空间，例如 `examplegal:catalog`。动作名最长 80 个 ASCII 字符，完整格式为 `[a-z0-9_.-]+:[a-z0-9_./-]+`。每个端点最多 64 个不同动作名。同名动作可以分别注册事件和请求，同类处理器重复注册会抛出异常。当前版本暂无公开注销或向现有会话主动刷新能力的接口，建议在初始化阶段完成注册。
 
 每条消息的业务正文最多 8 KiB，每个会话最多 32 个待完成请求。请求时限为 5 秒，由服务端定时检查，因此失败回调可稍晚执行。需要正文为空时传 `new byte[0]`。使用 `whenComplete` 等非阻塞回调，避免在游戏线程上调用 `get()` 或 `join()`。请求处理器适合快速操作。耗时业务可以先回任务编号，异步处理后再通过事件发送结果，发消息及修改 Bukkit 状态前切回主线程。
 

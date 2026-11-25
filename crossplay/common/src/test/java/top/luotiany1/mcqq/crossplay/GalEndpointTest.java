@@ -1,7 +1,11 @@
 package top.luotiany1.mcqq.crossplay;
 
+import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -37,9 +41,30 @@ public final class GalEndpointTest {
         client.get().onEvent(CLIENT_ACTION, (peer, data) -> clientEvent.set(Arrays.equals(DATA, data)));
         server.onEvent(SERVER_ACTION, (peer, data) -> serverEvent.set(Arrays.equals(DATA, data)));
 
+        GalEventApi<String> clientEvents = new GalEventApi<>(client.get());
+        GalEventApi<String> serverEvents = new GalEventApi<>(server);
+        AtomicReference<Map<String, Object>> reply = new AtomicReference<>();
+        Map<String, Object> event = new LinkedHashMap<>();
+        event.put("value", Arrays.asList(true, null, "测试", Long.MAX_VALUE,
+                new BigInteger("18446744073709551615"), Collections.singletonMap("page", 2)));
+        clientEvents.listenForEvent("test", "Server", "Update", (peer, data) -> reply.set(data));
+        serverEvents.listenForEvent("test", "Client", "Select", (peer, data) ->
+                check(serverEvents.notifyPeer(peer, "test", "Server", "Update", data)));
+        check(!clientEvents.notifyPeer(PEER, "test", "Client", "Select", event));
         check(!server.canRequest(PEER, CLIENT_ACTION));
         client.get().begin(PEER);
         check(server.canRequest(PEER, CLIENT_ACTION) && client.get().canRequest(PEER, SERVER_ACTION));
+        check(clientEvents.notifyPeer(PEER, "test", "Client", "Select", event));
+        check(event.equals(reply.get()));
+        check(!clientEvents.notifyPeer(PEER, "test", "client", "Select", event));
+        check(!clientEvents.notifyPeer(PEER, "test", "-client", "Select", event));
+        checkRejected(() -> GalEventData.decode(new byte[] {1, 0, 1, 0, 1, 65, 99}));
+        checkRejected(() -> GalEventData.decode(new byte[] {1, 0, 0, 1}));
+        checkRejected(() -> GalEventData.encode(Collections.singletonMap("value", new Object())));
+        checkRejected(() -> GalEventData.encode(Collections.singletonMap("value", new String(new char[8192]))));
+        Map<String, Object> cycle = new LinkedHashMap<>();
+        cycle.put("cycle", cycle);
+        checkRejected(() -> GalEventData.encode(cycle));
         check(client.get().sendEvent(PEER, SERVER_ACTION, DATA) && serverEvent.get());
         check(server.sendEvent(PEER, CLIENT_ACTION, DATA) && clientEvent.get());
         check(Arrays.equals(server.request(PEER, CLIENT_ACTION, DATA).join(), DATA));
@@ -52,12 +77,22 @@ public final class GalEndpointTest {
         check(!pending.isDone());
         client.get().receive(PEER, GalPacket.reset());
         check(pending.isCompletedExceptionally() && !client.get().canRequest(PEER, SERVER_ACTION));
+        check(!clientEvents.notifyPeer(PEER, "test", "Client", "Select", event));
         drop.set(false);
         server.close(PEER);
         client.get().begin(PEER);
         check(client.get().canRequest(PEER, SERVER_ACTION));
         check(GalPacket.decode(new byte[GalPacket.MAX_FRAME + 1]) == null);
         check(GalPacket.decode(new byte[] {1, 4, 0, 0, 0, 0, 1, 65}) == null);
-        System.out.println("MasterGAL capability exchange, bidirectional messages, errors, and session reset passed");
+        System.out.println("GAL capability exchange, structured and raw events, requests, and session reset passed");
+    }
+
+    private static void checkRejected(Runnable action) {
+        try {
+            action.run();
+        } catch (IllegalArgumentException expected) {
+            return;
+        }
+        throw new AssertionError("Invalid structured event was accepted");
     }
 }

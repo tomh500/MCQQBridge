@@ -3,17 +3,26 @@ package top.luotiany1.mcqq.crossplay;
 import java.util.Arrays;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.IntConsumer;
+import java.util.function.BiConsumer;
 import org.bukkit.Bukkit;
+import org.bukkit.Location;
+import org.bukkit.World;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.inventory.InventoryOpenEvent;
+import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.plugin.messaging.Messenger;
@@ -23,6 +32,8 @@ public final class SpigotMasterGAL extends JavaPlugin implements Listener {
     private final GalEndpoint<Player> gal = new GalEndpoint<>(false,
             (player, bytes) -> player.sendPluginMessage(this, GalPacket.BACKEND_CHANNEL, bytes),
             failure -> getLogger().warning("MasterGAL handler failed: " + failure.getClass().getSimpleName()));
+    private final GalEventApi<Player> events = new GalEventApi<>(gal);
+    private final Set<UUID> bedrockPlayers = new HashSet<>();
     private final Map<UUID, PendingForm> forms = new HashMap<>();
     private final Map<UUID, PendingMenu> menus = new HashMap<>();
     private int nextFormId;
@@ -49,6 +60,8 @@ public final class SpigotMasterGAL extends JavaPlugin implements Listener {
 
     @Override
     public void onDisable() {
+        bedrockPlayers.clear();
+        forms.values().forEach(pending -> pending.timeout.cancel());
         forms.clear();
         menus.values().forEach(pending -> pending.timeout.cancel());
         menus.clear();
@@ -57,6 +70,44 @@ public final class SpigotMasterGAL extends JavaPlugin implements Listener {
 
     public GalApi<Player> api() {
         return gal;
+    }
+
+    public void listenForEvent(String namespace, String system, String event,
+                               BiConsumer<Player, Map<String, Object>> handler) {
+        events.listenForEvent(namespace, system, event, handler);
+    }
+
+    public boolean notifyToClient(Player player, String namespace, String system, String event,
+                                  Map<String, Object> data) {
+        return events.notifyPeer(player, namespace, system, event, data);
+    }
+
+    public int notifyToMultiClients(List<Player> players, String namespace, String system, String event,
+                                    Map<String, Object> data) {
+        int sent = 0;
+        for (Player player : new LinkedHashSet<>(players)) {
+            if (notifyToClient(player, namespace, system, event, data)) {
+                sent++;
+            }
+        }
+        return sent;
+    }
+
+    public int notifyToClientsNearby(Player except, Location origin, double distance, String namespace,
+                                     String system, String event, Map<String, Object> data) {
+        World world = Objects.requireNonNull(origin.getWorld());
+        if (!Double.isFinite(distance) || distance < 0) {
+            throw new IllegalArgumentException("Distance must be finite and nonnegative");
+        }
+        int sent = 0;
+        double radiusSquared = distance * distance;
+        for (Player player : world.getPlayers()) {
+            if (!player.equals(except) && player.getLocation().distanceSquared(origin) <= radiusSquared
+                    && notifyToClient(player, namespace, system, event, data)) {
+                sent++;
+            }
+        }
+        return sent;
     }
 
     /**
@@ -88,6 +139,16 @@ public final class SpigotMasterGAL extends JavaPlugin implements Listener {
             timeout.cancel();
             return false;
         }
+        return showBedrockMenu(player, menu, onResult);
+    }
+
+    /** Whether the current backend connection was identified as Bedrock by the proxy. */
+    public boolean supportsBedrockForms(Player player) {
+        return isEnabled() && player.isOnline() && bedrockPlayers.contains(player.getUniqueId());
+    }
+
+    /** Render a button menu only for Bedrock. Java players can continue into the native inventory. */
+    public boolean showBedrockMenu(Player player, GalMenu menu, IntConsumer onResult) {
         List<BedrockForm.Button> buttons = new java.util.ArrayList<>();
         for (GalMenu.Button button : menu.buttons) {
             buttons.add(new BedrockForm.Button(button.label, button.texture));
@@ -113,8 +174,7 @@ public final class SpigotMasterGAL extends JavaPlugin implements Listener {
         }
         Objects.requireNonNull(onResult);
         UUID uuid = player.getUniqueId();
-        if (!isEnabled() || !player.isOnline() || forms.containsKey(uuid)
-                || !player.getListeningPluginChannels().contains(BedrockForm.CHANNEL)) {
+        if (!supportsBedrockForms(player) || forms.containsKey(uuid)) {
             return false;
         }
         int id = ++nextFormId;
@@ -138,6 +198,10 @@ public final class SpigotMasterGAL extends JavaPlugin implements Listener {
 
     private void formResponse(String channel, Player player, byte[] bytes) {
         UUID uuid = player.getUniqueId();
+        if (Arrays.equals(bytes, BedrockForm.AVAILABLE)) {
+            bedrockPlayers.add(uuid);
+            return;
+        }
         PendingForm pending = forms.get(uuid);
         if (pending == null) {
             return;
@@ -178,12 +242,28 @@ public final class SpigotMasterGAL extends JavaPlugin implements Listener {
 
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
-        gal.close(event.getPlayer());
-        PendingForm pending = forms.remove(event.getPlayer().getUniqueId());
+        Player player = event.getPlayer();
+        gal.close(player);
+        bedrockPlayers.remove(player.getUniqueId());
+        discardMenus(player.getUniqueId());
+    }
+
+    @EventHandler
+    public void onWorldChange(PlayerChangedWorldEvent event) {
+        discardMenus(event.getPlayer().getUniqueId());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onInventoryOpen(InventoryOpenEvent event) {
+        discardMenus(event.getPlayer().getUniqueId());
+    }
+
+    private void discardMenus(UUID uuid) {
+        PendingForm pending = forms.remove(uuid);
         if (pending != null) {
             pending.timeout.cancel();
         }
-        PendingMenu menu = menus.remove(event.getPlayer().getUniqueId());
+        PendingMenu menu = menus.remove(uuid);
         if (menu != null) {
             menu.timeout.cancel();
         }

@@ -2,6 +2,9 @@ package top.luotiany1.mcqq.crossplay;
 
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.Map;
+import java.util.function.BiConsumer;
 import java.util.concurrent.TimeUnit;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
@@ -25,17 +28,28 @@ import net.minecraft.resources.Identifier;
 import org.slf4j.LoggerFactory;
 
 public final class FabricMasterGAL implements ClientModInitializer {
+    private static final byte[] RESET = GalPacket.reset();
     private static final long TIMEOUT = TimeUnit.SECONDS.toNanos(6);
     private static final GalEndpoint<Minecraft> GAL = new GalEndpoint<>(true,
             (client, bytes) -> ClientPlayNetworking.send(new GalPayload(bytes)),
             failure -> LoggerFactory.getLogger("FabricMasterGAL")
                     .warn("MasterGAL handler failed: {}", failure.getClass().getSimpleName()));
+    private static final GalEventApi<Minecraft> EVENTS = new GalEventApi<>(GAL);
     private int nextId;
     private long nextHello;
     private PendingProbe pending;
 
     public static GalApi<Minecraft> api() {
         return GAL;
+    }
+
+    public static void listenForEvent(String namespace, String system, String event,
+                                      BiConsumer<Minecraft, Map<String, Object>> handler) {
+        EVENTS.listenForEvent(namespace, system, event, handler);
+    }
+
+    public static boolean notifyToServer(String namespace, String system, String event, Map<String, Object> data) {
+        return EVENTS.notifyPeer(Minecraft.getInstance(), namespace, system, event, data);
     }
 
     @Override
@@ -46,11 +60,15 @@ public final class FabricMasterGAL implements ClientModInitializer {
         PayloadTypeRegistry.serverboundPlay().register(GalPayload.TYPE, GalPayload.CODEC);
         PayloadTypeRegistry.clientboundConfiguration().register(GalPayload.TYPE, GalPayload.CODEC);
         ClientPlayNetworking.registerGlobalReceiver(Payload.TYPE, (payload, context) -> receive(payload));
-        ClientPlayNetworking.registerGlobalReceiver(GalPayload.TYPE,
-                (payload, context) -> GAL.receive(context.client(), payload.bytes()));
+        ClientPlayNetworking.registerGlobalReceiver(GalPayload.TYPE, (payload, context) -> {
+            if (Arrays.equals(payload.bytes(), RESET)) {
+                resetSession(context.client());
+            } else {
+                GAL.receive(context.client(), payload.bytes());
+            }
+        });
         ClientConfigurationNetworking.registerGlobalReceiver(GalPayload.TYPE, (payload, context) -> {
-            GalPacket frame = GalPacket.decode(payload.bytes());
-            if (frame != null && frame.kind == GalPacket.Kind.RESET) {
+            if (Arrays.equals(payload.bytes(), RESET)) {
                 context.client().execute(() -> resetSession(context.client()));
             }
         });
@@ -91,6 +109,9 @@ public final class FabricMasterGAL implements ClientModInitializer {
         pending = null;
         nextHello = 0;
         GAL.close(client);
+        if (client.gui.screen() instanceof GalMenuScreen) {
+            client.setScreenAndShow(null);
+        }
     }
 
     private void openMenu(Minecraft client, byte[] bytes) {
@@ -98,7 +119,7 @@ public final class FabricMasterGAL implements ClientModInitializer {
         if (frame == null || frame.menu == null) {
             return;
         }
-        client.execute(() -> client.setScreenAndShow(new GalMenuScreen(client, frame.id, frame.menu)));
+        client.setScreenAndShow(new GalMenuScreen(client, frame.id, frame.menu));
     }
 
     private int sendEvent(FabricClientCommandSource source) {
@@ -195,16 +216,25 @@ public final class FabricMasterGAL implements ClientModInitializer {
         @Override
         public void onClose() {
             choose(GalMenu.CLOSED);
-            super.onClose();
+        }
+
+        @Override
+        public void removed() {
+            reply(GalMenu.CLOSED);
+            super.removed();
         }
 
         private void choose(int result) {
+            reply(result);
+            client.setScreenAndShow(null);
+        }
+
+        private void reply(int result) {
             if (!replied) {
                 replied = true;
                 if (client.getConnection() != null) {
                     GAL.sendEvent(client, "mastergal:menu_result", GalMenu.encodeResult(menuId, result));
                 }
-                client.setScreenAndShow(null);
             }
         }
     }

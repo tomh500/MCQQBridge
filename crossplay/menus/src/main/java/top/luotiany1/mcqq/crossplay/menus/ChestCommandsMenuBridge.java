@@ -1,12 +1,17 @@
 package top.luotiany1.mcqq.crossplay.menus;
 
 import java.lang.reflect.Method;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.BiPredicate;
 import java.util.function.IntConsumer;
+import java.util.function.Function;
+import java.util.function.Predicate;
 import org.bukkit.ChatColor;
+import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -15,6 +20,7 @@ import org.bukkit.event.inventory.InventoryOpenEvent;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 import top.luotiany1.mcqq.crossplay.GalMenu;
 import top.luotiany1.mcqq.crossplay.SpigotMasterGAL;
@@ -22,16 +28,52 @@ import top.luotiany1.mcqq.crossplay.SpigotMasterGAL;
 /** Optional reflective hook: ChestCommands stays a soft dependency and owns its click actions. */
 final class ChestCommandsMenuBridge implements Listener {
     private final JavaPlugin plugin;
+    private static final int PAGE_SIZE = 13;
     private final MenuDispatcher dispatcher;
+    private final Function<InventoryHolder, Object> menuViewOf;
+    private final Predicate<Player> supportsForms;
+    private final BiPredicate<Player, Object> allowedMenu;
     private final Set<java.util.UUID> openingNativeMenu = new HashSet<>();
 
-    ChestCommandsMenuBridge(JavaPlugin plugin, SpigotMasterGAL masterGal) {
-        this(plugin, masterGal::showMenu);
+    ChestCommandsMenuBridge(JavaPlugin plugin, SpigotMasterGAL masterGal, Plugin chestCommands)
+            throws ReflectiveOperationException {
+        this(plugin, masterGal::showBedrockMenu, masterGal::supportsBedrockForms,
+                menuPolicy(plugin, chestCommands), ChestCommandsMenuBridge::getMenuView);
     }
 
-    ChestCommandsMenuBridge(JavaPlugin plugin, MenuDispatcher dispatcher) {
+    ChestCommandsMenuBridge(JavaPlugin plugin, MenuDispatcher dispatcher, Predicate<Player> supportsForms,
+                            BiPredicate<Player, Object> allowedMenu, Function<InventoryHolder, Object> menuViewOf) {
         this.plugin = plugin;
         this.dispatcher = dispatcher;
+        this.supportsForms = supportsForms;
+        this.allowedMenu = allowedMenu;
+        this.menuViewOf = menuViewOf;
+    }
+
+    private static BiPredicate<Player, Object> menuPolicy(JavaPlugin plugin, Plugin chestCommands)
+            throws ReflectiveOperationException {
+        String root = "me.filoghost.chestcommands.";
+        ClassLoader loader = chestCommands.getClass().getClassLoader();
+        Class<?> menuType = loader.loadClass(root + "menu.InternalMenu");
+        Method sourceFile = menuType.getMethod("getSourceFile");
+        Method openPermission = menuType.getMethod("getOpenPermission");
+        Method activeMenu = loader.loadClass(root + "menu.MenuManager").getMethod("getMenuByFileName", String.class);
+        Class<?> holderType = loader.loadClass(root + "inventory.MenuInventoryHolder");
+        holderType.getMethod("getMenuView");
+        return (player, menu) -> {
+            if (!chestCommands.isEnabled() || !menuType.isInstance(menu)) {
+                return false;
+            }
+            try {
+                Path source = (Path) sourceFile.invoke(menu);
+                String name = source.getFileName().toString();
+                return plugin.getConfig().getStringList("chestcommands-form-menus").contains(name)
+                        && activeMenu.invoke(null, name) == menu
+                        && player.hasPermission((String) openPermission.invoke(menu));
+            } catch (ReflectiveOperationException | RuntimeException failure) {
+                return false;
+            }
+        };
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -40,16 +82,16 @@ final class ChestCommandsMenuBridge implements Listener {
             return;
         }
         Player player = (Player) event.getPlayer();
-        if (openingNativeMenu.contains(player.getUniqueId())) {
+        if (openingNativeMenu.contains(player.getUniqueId()) || !supportsForms.test(player)) {
             return;
         }
-        Object menuView = getMenuView(event.getInventory().getHolder());
+        Object menuView = menuViewOf.apply(event.getInventory().getHolder());
         if (menuView == null) {
             return;
         }
         List<Integer> slots = new ArrayList<>();
         Object menu = invoke(menuView, "getMenu");
-        if (menu == null) {
+        if (menu == null || !allowedMenu.test(player, menu)) {
             return;
         }
         int rows = number(invoke(menu, "getRows"), 0);
@@ -61,50 +103,42 @@ final class ChestCommandsMenuBridge implements Listener {
         if (slots.isEmpty()) {
             return;
         }
-        List<Integer> firstPage = page(slots, 0, 14);
-        List<GalMenu.Button> buttons = render(player, menuView, firstPage);
-        if (slots.size() > 14) {
-            buttons.add(new GalMenu.Button("下一页"));
-        }
-        String title = String.valueOf(invoke(menu, "getTitle"));
-        if (dispatcher.showMenu(player, new GalMenu(clean(title), "选择菜单项目。", buttons), result -> {
-            if (result == GalMenu.UNAVAILABLE) {
-                openNative(player, menuView);
-            } else if (result >= 0 && result < firstPage.size()) {
-                Object icon = invoke(menuView, "getIcon", new Class<?>[]{int.class}, firstPage.get(result));
-                invokeIcon(icon, menuView, player);
-            } else if (result == 14 && slots.size() > 14) {
-                openPage(player, menuView, slots, 14, title);
-            }
-        })) {
+        if (showPage(player, player.getWorld(), menuView, menu, slots, 0)) {
             event.setCancelled(true);
         }
     }
 
-    private void openPage(Player player, Object menuView, List<Integer> slots, int offset, String title) {
-        List<Integer> current = page(slots, offset, 14);
+    private boolean showPage(Player player, World world, Object menuView, Object menu,
+                             List<Integer> slots, int offset) {
+        List<Integer> current = page(slots, offset, PAGE_SIZE);
         List<GalMenu.Button> buttons = render(player, menuView, current);
-        if (offset > 0) {
+        int previous = offset > 0 ? buttons.size() : -1;
+        if (previous >= 0) {
             buttons.add(new GalMenu.Button("上一页"));
         }
-        if (offset + current.size() < slots.size()) {
+        int next = offset + current.size() < slots.size() ? buttons.size() : -1;
+        if (next >= 0) {
             buttons.add(new GalMenu.Button("下一页"));
         }
-        if (!dispatcher.showMenu(player, new GalMenu(clean(title), "选择菜单项目。", buttons), result -> {
-            if (result == GalMenu.UNAVAILABLE) {
+        int nativeMenu = buttons.size();
+        buttons.add(new GalMenu.Button("打开原版菜单"));
+        String title = clean(String.valueOf(invoke(menu, "getTitle")));
+        return dispatcher.showMenu(player, new GalMenu(title, "选择菜单项目。", buttons), result -> {
+            if (!player.isOnline() || player.getWorld() != world || !allowedMenu.test(player, menu)) {
+                return;
+            }
+            if (result == GalMenu.UNAVAILABLE || result == nativeMenu) {
                 openNative(player, menuView);
             } else if (result >= 0 && result < current.size()) {
                 Object icon = invoke(menuView, "getIcon", new Class<?>[]{int.class}, current.get(result));
                 invokeIcon(icon, menuView, player);
-            } else if (result == current.size() && offset > 0) {
-                openPage(player, menuView, slots, Math.max(0, offset - 14), title);
-            } else if (result == current.size() + (offset > 0 ? 1 : 0)
-                    && offset + current.size() < slots.size()) {
-                openPage(player, menuView, slots, offset + 14, title);
+            } else if (result >= 0 && (result == previous || result == next)) {
+                int newOffset = result == previous ? offset - PAGE_SIZE : offset + PAGE_SIZE;
+                if (!showPage(player, world, menuView, menu, slots, newOffset)) {
+                    openNative(player, menuView);
+                }
             }
-        })) {
-            openNative(player, menuView);
-        }
+        });
     }
 
     private List<GalMenu.Button> render(Player player, Object menuView, List<Integer> slots) {
@@ -147,15 +181,16 @@ final class ChestCommandsMenuBridge implements Listener {
         }
     }
 
-    private Object getMenuView(InventoryHolder holder) {
-        return invoke(holder, "getMenuView");
+    private static Object getMenuView(InventoryHolder holder) {
+        return holder != null && holder.getClass().getName().equals(
+                "me.filoghost.chestcommands.inventory.MenuInventoryHolder") ? invoke(holder, "getMenuView") : null;
     }
 
-    private Object invoke(Object target, String name) {
+    private static Object invoke(Object target, String name) {
         return invoke(target, name, new Class<?>[0]);
     }
 
-    private Object invoke(Object target, String name, Class<?>[] parameterTypes, Object... arguments) {
+    private static Object invoke(Object target, String name, Class<?>[] parameterTypes, Object... arguments) {
         if (target == null) {
             return null;
         }
@@ -186,7 +221,8 @@ final class ChestCommandsMenuBridge implements Listener {
 
     private String clean(String text) {
         String clean = ChatColor.stripColor(ChatColor.translateAlternateColorCodes('&', text == null ? "" : text));
-        return clean.replace('\n', ' ').replace('\r', ' ');
+        clean = clean.replace('\n', ' ').replace('\r', ' ');
+        return clean.length() <= 128 ? clean : clean.substring(0, 127) + "…";
     }
 
     @FunctionalInterface

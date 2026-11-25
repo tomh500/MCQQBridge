@@ -2,13 +2,13 @@
 
 ## 适用版本
 
-本文对应 **BungeeMasterGAL 0.2.0**，目标平台为 **BungeeCord**。发行 JAR 使用 Java 8 字节码，代理进程须满足其 BungeeCord、Floodgate 和 Geyser 构建各自的 Java 下限。本地测试使用 Java 25、支持 Minecraft Java 26.2 和 26.3 协议的 BungeeCord、**Floodgate 2.2.5-SNAPSHOT（b141-81b65cc）** 和 **Geyser-BungeeCord 2.12.1-b1281**。这是已核对的部署组合，以上构建号不代表最低版本要求。测试后端为 Spigot 1.12.2、26.2。其他代理实现需单独适配。
+本文对应 **BungeeMasterGAL 0.3.0**，目标平台为 **BungeeCord**。发行 JAR 使用 Java 8 字节码，代理进程须满足其 BungeeCord、Floodgate 和 Geyser 构建各自的 Java 下限。本地测试使用 Java 25、支持 Minecraft Java 26.2 和 26.3 协议的 BungeeCord、**Floodgate 2.2.5-SNAPSHOT（b141-81b65cc）** 和 **Geyser-BungeeCord 2.12.1-b1281**。这是已核对的部署组合，以上构建号不代表最低版本要求。测试后端为 Spigot 1.12.2、26.2。其他代理实现需单独适配。
 
-把 `BungeeMasterGAL-0.2.0.jar` 和 Floodgate 的 BungeeCord 版安装到代理的 `plugins/`。插件硬依赖 Floodgate。基岩入口另需 Geyser-BungeeCord，将 Geyser 的 Java 端鉴权模式设为 `floodgate`，后端安装 [SpigotMasterGAL](SpigotMaster-GAL.md)。现有 Geyser 构建的配置项为 `java.auth-type`。MasterGAL 在代理查询基岩身份和发送表单，因此可以保持代理 Floodgate 的 `send-floodgate-data: false`。
+把 `BungeeMasterGAL-0.3.0.jar` 和 Floodgate 的 BungeeCord 版安装到代理的 `plugins/`。插件硬依赖 Floodgate。基岩入口另需 Geyser-BungeeCord，将 Geyser 的 Java 端鉴权模式设为 `floodgate`，后端安装 [SpigotMasterGAL](SpigotMaster-GAL.md)。现有 Geyser 构建的配置项为 `java.auth-type`。MasterGAL 在代理查询基岩身份和发送表单，因此可以保持代理 Floodgate 的 `send-floodgate-data: false`。代理在初次连接和切换后端后向当前后端发送已确认的表单能力，配套的 SpigotMasterGAL 0.4.0 使用该能力路由按钮菜单。
 
 ## 扩展点与 API 边界
 
-BungeeMasterGAL 负责会话路由。业务事件、请求处理器和结果回调在 [Spigot API](SpigotMaster-GAL.md) 与 [Fabric API](FabricMaster-GAL.md) 上注册。0.2.0 的代理组件没有对外的业务注册方法或会话监听 SDK。代理插件若依赖它的加载顺序，可以在自己的 `bungee.yml` 中声明 `depends: [BungeeMasterGAL]`。需要在代理直接制作独立的基岩界面时，可以依赖 `floodgate`，使用 Floodgate 的公开 API。
+BungeeMasterGAL 负责会话路由。业务事件、请求处理器和结果回调在 [Spigot API](SpigotMaster-GAL.md) 与 [Fabric API](FabricMaster-GAL.md) 上注册。代理组件没有对外的业务注册方法或会话监听 SDK。代理插件若依赖它的加载顺序，可以在自己的 `bungee.yml` 中声明 `depends: [BungeeMasterGAL]`。需要在代理直接制作独立的基岩界面时，可以依赖 `floodgate`，使用 Floodgate 的公开 API。
 
 | 入口或回调 | 挂载位置和行为 |
 | --- | --- |
@@ -39,5 +39,5 @@ Fabric 发 HELLO 公布可接收的动作，代理将其转发给当前后端。
 
 - 确认代理启动日志中 Geyser、Floodgate 和 BungeeMasterGAL 已加载。只用 Java 端进行开发时，BungeeMasterGAL 依然要求代理安装 Floodgate。
 - 用 Fabric 的 `/crossplayevent` 与后端的 `/mastergalclient` 验证双向事件和请求。换服时分别确认新旧后端是否安装对应业务插件，并在新后端等待重新协商。
-- 基岩玩家执行 `/crossplay` 会打开世界查询表单。用 `/mastergalform` 验证 Spigot 到代理再到客户端的表单路径及回调。测试资源包读取、UDP 握手和游戏中表单点击是三个独立检查。
+- 基岩玩家执行 `/crossplay` 会打开世界查询表单。用 `/mastergalform` 验证 Spigot 到代理再到客户端的表单路径及回调。分别检查资源包读取、传输连接和游戏内的表单点击。基岩 26.60 起需要 NetherNet，Geyser 的基岩监听地址应按 NetherNet 网络要求配置。 [Geyser NetherNet 排查](https://geysermc.org/blog/preparing-for-nethernet/)
 - 只在部分后端失败时，检查当前路由、ViaVersion/ViaBackwards 的版本链和目标后端注册的能力。资源包放置位置及图标路径见 [BedrockPack](BedrockPack.md)。

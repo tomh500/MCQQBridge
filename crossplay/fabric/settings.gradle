@@ -6,4 +6,4 @@ pluginManagement {
     }
 }
 
-rootProject.name = 'FabricMasterGAL'
+rootProject.name = 'FabricMaster-GAL'

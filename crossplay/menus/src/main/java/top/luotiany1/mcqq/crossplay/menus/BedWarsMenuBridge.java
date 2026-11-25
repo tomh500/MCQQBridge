@@ -1,6 +1,8 @@
 package top.luotiany1.mcqq.crossplay.menus;
 
+import com.andrei1058.bedwars.api.arena.GameState;
 import com.andrei1058.bedwars.api.arena.IArena;
+import com.andrei1058.bedwars.api.arena.team.ITeam;
 import com.andrei1058.bedwars.api.arena.shop.ICategoryContent;
 import com.andrei1058.bedwars.api.events.shop.ShopOpenEvent;
 import com.andrei1058.bedwars.shop.ShopCache;
@@ -15,6 +17,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.bukkit.ChatColor;
+import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -63,7 +66,7 @@ public final class BedWarsMenuBridge implements Listener {
             return;
         }
         Player player = event.getPlayer();
-        if (!eligible(player)) {
+        if (!masterGal.supportsBedrockForms(player) || !eligible(player)) {
             return;
         }
         if (openRoot(player)) {
@@ -73,7 +76,9 @@ public final class BedWarsMenuBridge implements Listener {
 
     private boolean eligible(Player player) {
         IArena arena = bedWars.getArenaUtil().getArenaByPlayer(player);
-        return player.isOnline() && arena != null && arena.isPlayer(player) && !arena.isSpectator(player)
+        return player.isOnline() && !player.isDead() && arena != null && arena.isPlayer(player)
+                && arena.getStatus() == GameState.playing && arena.getWorld() == player.getWorld()
+                && !arena.isSpectator(player) && !arena.isRespawning(player)
                 && ShopCache.getShopCache(player.getUniqueId()) != null
                 && PlayerQuickBuyCache.getQuickBuyCache(player.getUniqueId()) != null;
     }
@@ -200,10 +205,19 @@ public final class BedWarsMenuBridge implements Listener {
             actions.add(() -> openRoot(player));
         }
         GalMenu menu = new GalMenu(title, truncate(content, 1900), buttons);
-        return masterGal.showMenu(player, menu, result -> {
+        IArena arena = bedWars.getArenaUtil().getArenaByPlayer(player);
+        ITeam team = arena.getTeam(player);
+        ShopCache cache = ShopCache.getShopCache(player.getUniqueId());
+        Location origin = player.getLocation();
+        return masterGal.showBedrockMenu(player, menu, result -> {
+            if (!eligible(player) || bedWars.getArenaUtil().getArenaByPlayer(player) != arena
+                    || arena.getTeam(player) != team || ShopCache.getShopCache(player.getUniqueId()) != cache
+                    || player.getWorld() != origin.getWorld() || player.getLocation().distanceSquared(origin) > 36) {
+                return;
+            }
             if (result == GalMenu.UNAVAILABLE) {
                 openNativeShop(player);
-            } else if (result >= 0 && result < actions.size() && eligible(player)) {
+            } else if (result >= 0 && result < actions.size()) {
                 actions.get(result).run();
             }
         });
@@ -222,11 +236,6 @@ public final class BedWarsMenuBridge implements Listener {
         // BedWars1058's own click handler performs affordability, upgrade, event, deduction,
         // inventory, and team-state checks in this method.
         selected.execute(player, cache, selected.getSlot());
-        plugin.getServer().getScheduler().runTask(plugin, () -> {
-            if (eligible(player)) {
-                openQuickBuy(player);
-            }
-        });
     }
 
     private void openNativeShop(Player player) {

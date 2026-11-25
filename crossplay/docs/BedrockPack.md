@@ -7,7 +7,7 @@
 | 资源包文件及显示名 | `MasterGAL.mcpack`，游戏内为 `MasterGAL` |
 | 资源包版本 | `0.1.0` |
 | 清单格式与最低引擎声明 | `format_version: 2`，`min_engine_version: [1, 21, 0]` |
-| 表单桥接组件 | SpigotMasterGAL **0.3.0** 和 BungeeMasterGAL **0.2.0** |
+| 表单桥接组件 | SpigotMasterGAL **0.4.0** 和 BungeeMasterGAL **0.3.0** |
 | 已核对的代理组合 | Geyser-BungeeCord **2.12.1-b1281** 和 Floodgate **2.2.5-SNAPSHOT（b141-81b65cc）** |
 
 最低引擎声明约束资源包本身。能否加入服务器，还取决于运行中的 Geyser 构建支持哪些 Bedrock 协议。当前资源包已通过该 Geyser 版本的包读取检查，真实客户端的下载、显示和表单点击仍需验收。

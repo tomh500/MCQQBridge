@@ -41,19 +41,12 @@ final class GadgetsMenuBridge implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onOpen(InventoryOpenEvent event) {
-        if (!(event.getPlayer() instanceof Player) || !gadgets.isEnabled()
+        if (event.isCancelled() || !(event.getPlayer() instanceof Player) || !gadgets.isEnabled()
                 || event.getInventory().getType() != InventoryType.CHEST) {
             return;
         }
-        // GadgetsMenu uses ordinary chest inventories. Only convert its actual main-menu opens.
-        boolean fromMainMenu = false;
-        for (StackTraceElement call : Thread.currentThread().getStackTrace()) {
-            if (MAIN_MENU.equals(call.getClassName()) && "openMainMenu".equals(call.getMethodName())) {
-                fromMainMenu = true;
-                break;
-            }
-        }
-        if (!fromMainMenu) {
+        Player player = (Player) event.getPlayer();
+        if (!masterGal.supportsBedrockForms(player) || !openingGadgetsMainMenu()) {
             return;
         }
         List<Integer> slots = new ArrayList<>();
@@ -63,10 +56,19 @@ final class GadgetsMenuBridge implements Listener {
                 slots.add(slot);
             }
         }
-        Player player = (Player) event.getPlayer();
         if (!slots.isEmpty() && showPage(player, event.getView(), player.getWorld(), slots, 0)) {
             event.setCancelled(true);
         }
+    }
+
+    private boolean openingGadgetsMainMenu() {
+        // GadgetsMenu 4.5.4 uses a chest inventory with no holder. Match the actual producer.
+        for (StackTraceElement call : Thread.currentThread().getStackTrace()) {
+            if (MAIN_MENU.equals(call.getClassName()) && "openMainMenu".equals(call.getMethodName())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean showPage(Player player, InventoryView view, World world, List<Integer> slots, int offset) {
@@ -85,7 +87,7 @@ final class GadgetsMenuBridge implements Listener {
         }
         int nativeMenu = buttons.size();
         buttons.add(new BedrockForm.Button("打开原版菜单", ""));
-        String title = ChatColor.stripColor(view.getTitle());
+        String title = cleanText(view.getTitle());
         return masterGal.showBedrockForm(player, new BedrockForm(title, "选择菜单项目。", buttons), result -> {
             if (!player.isOnline() || player.getWorld() != world || !gadgets.isEnabled()) {
                 return;
@@ -93,7 +95,7 @@ final class GadgetsMenuBridge implements Listener {
             if (result == BedrockForm.UNAVAILABLE || result == nativeMenu) {
                 player.openInventory(view.getTopInventory());
             } else if (result >= 0 && result < page.size()) {
-                select(view, page.get(result));
+                select(player, view, page.get(result));
             } else if (result >= 0 && (result == previous || result == next)) {
                 int newOffset = result == previous ? offset - PAGE_SIZE : offset + PAGE_SIZE;
                 if (!showPage(player, view, world, slots, newOffset)) {
@@ -103,13 +105,14 @@ final class GadgetsMenuBridge implements Listener {
         });
     }
 
-    private void select(InventoryView view, int slot) {
+    private void select(Player player, InventoryView view, int slot) {
         InventoryClickEvent event = new InventoryClickEvent(view, InventoryType.SlotType.CONTAINER, slot,
                 ClickType.LEFT, InventoryAction.PICKUP_ALL);
         try {
             click.invoke(menuListener, event);
         } catch (ReflectiveOperationException failure) {
-            gadgets.getLogger().warning("Could not open the selected GadgetsMenu entry.");
+            gadgets.getLogger().warning("Could not open the selected GadgetsMenu entry; opening the original menu.");
+            player.openInventory(view.getTopInventory());
         }
     }
 
@@ -121,6 +124,11 @@ final class GadgetsMenuBridge implements Listener {
         if (!meta.hasDisplayName()) {
             return "";
         }
-        return ChatColor.stripColor(meta.getDisplayName()).replaceAll("[\\p{Cntrl}]", " ").trim();
+        return cleanText(meta.getDisplayName());
+    }
+
+    private static String cleanText(String text) {
+        String stripped = ChatColor.stripColor(text).replaceAll("[\\p{Cntrl}]", " ").trim();
+        return stripped.length() <= 128 ? stripped : stripped.substring(0, 127) + "…";
     }
 }

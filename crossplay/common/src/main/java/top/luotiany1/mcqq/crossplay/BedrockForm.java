@@ -12,6 +12,8 @@ import java.util.Objects;
 
 public final class BedrockForm {
     static final String CHANNEL = "mcqq:galform";
+    // Sent by Bungee on the current backend connection after Floodgate identification.
+    static final byte[] AVAILABLE = {1, 2};
     static final int MAX_BYTES = 16_384;
     public static final int CLOSED = -1;
     public static final int UNAVAILABLE = -2;
