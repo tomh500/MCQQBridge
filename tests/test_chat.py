@@ -53,14 +53,43 @@ class ChatTests(unittest.IsolatedAsyncioTestCase):
         store = Store(self.cfg["database"])
         store.bind(dict(app_id="app", group_openid="group", member_openid="member", event_id="bind", action="bind", platform="java", name="Steve"),
                    dict(uuid=PLAYER, name="Steve", platform="java"))
-        await self.post("from-qq", self.qq(nickname="QQ 名字", group_nickname="群昵称"))
+        for event, fields in (
+            ("first", {"nickname": "QQ 名字", "role": "admin"}),
+            ("card", {"nickname": "QQ 名字", "group_nickname": "群昵称", "role": "admin"}),
+            ("cached", {"nickname": "更新的 QQ 名字", "role": "admin"}),
+        ):
+            self.assertEqual((await self.post("from-qq", dict(self.qq(**fields), event_id=event))).status, 200)
         messages = (await (await self.post("to-game", {}, True)).json())["messages"]
-        self.assertEqual((messages[0]["uuid"], messages[0]["name"]), (PLAYER, "Steve"))
+        self.assertEqual([(m["uuid"], m["name"], m["role"], m["qq_id"]) for m in messages], [
+            (PLAYER, "Steve", "admin", "member"),
+            (PLAYER, "群昵称", "admin", "member"),
+            (PLAYER, "群昵称", "admin", "member"),
+        ])
         game = dict(uuid=PLAYER, name="Steve", server="other", event_id="game1", text="/op  @a %s & !")
         self.assertEqual((await self.post("from-game", game, True)).status, 403)
         game["server"] = "survival"
         self.assertEqual((await self.post("from-game", game, True)).status, 200)
         self.assertEqual((await (await self.post("to-qq", {})).json())["messages"][0]["text"], "[游戏内]群昵称:"+game["text"])
+
+    async def test_unbound_sender_names_are_scoped_to_the_source_group(self):
+        self.cfg["allowed_groups"] = ["group", "other"]
+        cases = (
+            ("other", {"group_nickname": "乙群昵称", "nickname": "QQ 全局名"}, "乙群昵称"),
+            ("group", {"nickname": "QQ 全局名"}, "QQ 全局名"),
+            ("group", {"group_nickname": "甲群昵称", "nickname": "QQ 全局名"}, "甲群昵称"),
+            ("group", {"nickname": "QQ 新名字", "group_nickname": "  "}, "甲群昵称"),
+            ("group", {"group_nickname": "甲群新昵称", "nickname": "QQ 新名字"}, "甲群新昵称"),
+            ("other", {}, "乙群昵称"),
+            ("group", {"nickname": "PRIVATE-MEMBER-ID", "group_nickname": "private-member-id",
+                       "member_openid": "private-member-id"}, "群友"),
+        )
+        for index, (group, fields, _) in enumerate(cases):
+            data = {**self.qq(), **fields, "group_openid": group, "event_id": f"event-{index}"}
+            self.assertEqual((await self.post("from-qq", data)).status, 200)
+        messages = (await (await self.post("to-game", {}, True)).json())["messages"]
+        self.assertEqual([(m["uuid"], m["name"]) for m in messages], [
+            ("", expected) for _, _, expected in cases
+        ])
 
     async def test_explicit_group_routes_and_alias(self):
         self.cfg["allowed_groups"] = ["group", "other"]
@@ -195,7 +224,7 @@ class ChatTests(unittest.IsolatedAsyncioTestCase):
         text = f"<@{member}> <@{'B' * 32}> 你好"
         message = self.cross_group_message("mention", text, raw={
             "content": text,
-            "author": {"member_nickname": "群内发件人"},
+            "author": {"card": "群内发件人", "nickname": "全局昵称"},
             "mentions": [{"member_openid": member, "member_nickname": "群内称呼"}],
         })
         await QQBot.relay_group(bot, message)
@@ -203,6 +232,7 @@ class ChatTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(path, "/v1/chat/from-qq")
         self.assertEqual(payload["text"], "[tag 群内称呼] [tag 未知群成员] 你好")
         self.assertEqual(payload["group_nickname"], "群内发件人")
+        self.assertEqual(payload["nickname"], "小明")
 
     async def test_cross_group_mode_renewal_scope_and_expiry(self):
         bot = self.cross_group_bot()

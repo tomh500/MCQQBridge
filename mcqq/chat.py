@@ -6,6 +6,11 @@ import uuid
 from aiohttp import web
 
 
+def display_nickname(name, member_openid):
+    name = name.strip()
+    return name if name.casefold() != member_openid.casefold() else ""
+
+
 def register(app, cfg, store, identity, resolve_media):
     allowed = cfg.get("allowed_groups", [])
     outbound = cfg.get("chat_bridge", {}).get("outbound_groups", allowed)
@@ -84,17 +89,30 @@ def register(app, cfg, store, identity, resolve_media):
                     raise ValueError("nickname")
                 if not isinstance(group_nickname, str) or len(group_nickname) > 128:
                     raise ValueError("group_nickname")
+                member = data["member_openid"]
+                group_key = (subject, data["group_openid"])
+                group_nickname = display_nickname(group_nickname, member)
                 if group_nickname:
                     db.execute("INSERT OR REPLACE INTO chat_group_names VALUES(?,?,?)",
-                               (subject, data["group_openid"], group_nickname))
-                if nickname:
-                    db.execute("INSERT OR REPLACE INTO chat_names VALUES(?,?,?)", (subject, data["group_openid"], nickname))
-                cached_name = db.execute("SELECT nickname FROM chat_names WHERE subject=? AND group_id=?", (subject, data["group_openid"])).fetchone()
+                               (*group_key, group_nickname))
+                else:
+                    cached_group_name = db.execute(
+                        "SELECT nickname FROM chat_group_names WHERE subject=? AND group_id=?", group_key).fetchone()
+                    if cached_group_name:
+                        group_nickname = display_nickname(cached_group_name[0], member)
+                qq_name = display_nickname(nickname, member)
+                if qq_name:
+                    db.execute("INSERT OR REPLACE INTO chat_names VALUES(?,?,?)", (*group_key, qq_name))
+                else:
+                    cached_name = db.execute(
+                        "SELECT nickname FROM chat_names WHERE subject=? AND group_id=?", group_key).fetchone()
+                    if cached_name:
+                        qq_name = display_nickname(cached_name[0], member)
                 db.execute("INSERT OR IGNORE INTO chat_sender_log VALUES(?,?,?,?,?)", (data["app_id"]+":"+data["group_openid"]+":"+event, data["group_openid"], data["member_openid"], nickname, time.time()))
                 binding = db.execute("SELECT * FROM bindings WHERE subject=?", (subject,)).fetchone()
                 custom_title = db.execute("SELECT title FROM chat_titles WHERE subject=? AND group_id=?", (subject, data["group_openid"])).fetchone()
                 payload = {"text": text, "source": "qq", "uuid": binding["game_uuid"] if binding else "",
-                           "name": binding["game_name"] if binding else (nickname or (cached_name[0] if cached_name else "群友")),
+                           "name": group_nickname or (binding["game_name"] if binding else (qq_name or "群友")),
                            "group_name": cfg.get("chat_bridge", {}).get("group_aliases", {}).get(data["group_openid"]) or str(data.get("group_name", ""))[:128] or data["group_openid"],
                            "qq_id": data["member_openid"], "role": role, "title": custom_title[0] if custom_title else None, "media": attachments}
                 if not servers():

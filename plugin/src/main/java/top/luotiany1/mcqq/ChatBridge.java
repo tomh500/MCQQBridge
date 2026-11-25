@@ -8,6 +8,7 @@ import dev.aura.bungeechat.api.placeholder.PlaceHolder;
 import dev.aura.bungeechat.api.placeholder.PlaceHolderManager;
 import dev.aura.bungeechat.message.Format;
 import dev.aura.bungeechat.message.MessagesService;
+import dev.aura.bungeechat.message.PlaceHolderUtil;
 import net.md_5.bungee.api.connection.ProxiedPlayer;
 import net.md_5.bungee.api.connection.Server;
 import net.md_5.bungee.api.chat.TextComponent;
@@ -22,6 +23,8 @@ import net.md_5.bungee.config.YamlConfiguration;
 import net.md_5.bungee.event.EventHandler;
 import net.md_5.bungee.chat.ComponentSerializer;
 import java.io.*;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Proxy;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -87,6 +90,22 @@ public final class ChatBridge implements Listener {
         return text.replace('\u00a7', '?').replaceAll("[\\p{Cc}\\p{Cf}]", " ");
     }
 
+    static BungeeChatAccount withSenderName(BungeeChatAccount account, String displayName) {
+        String escapedName = PlaceHolderUtil.escape(literal(displayName));
+        return (BungeeChatAccount) Proxy.newProxyInstance(
+            BungeeChatAccount.class.getClassLoader(), new Class<?>[]{BungeeChatAccount.class},
+            (view, method, args) -> {
+                if (method.getName().equals("getName") || method.getName().equals("getDisplayName")) {
+                    return escapedName;
+                }
+                try {
+                    return method.invoke(account, args);
+                } catch (InvocationTargetException e) {
+                    throw e.getCause();
+                }
+            });
+    }
+
     private Optional<String> render(String uuid, String name, String text, boolean qq) {
         return render(uuid, name, text, qq, "member");
     }
@@ -118,7 +137,8 @@ public final class ChatBridge implements Listener {
         String title = qq ? (selfTitle == null ? titleFor(memberOpenid) : selfTitle) : "";
         Optional<BungeeChatAccount> account = uuid.isEmpty() ? Optional.empty() : AccountManager.getAccount(UUID.fromString(uuid));
         if (account.isPresent()) {
-            BungeeChatContext context = new BungeeChatContext(account.get(), text);
+            BungeeChatAccount sender = account.get();
+            BungeeChatContext context = new BungeeChatContext(qq ? withSenderName(sender, name) : sender, text);
             try {
                 if (qq) { qqRole.set(role); qqTitle.set(title); }
                 else saidSource.set(true);
@@ -126,7 +146,8 @@ public final class ChatBridge implements Listener {
                     if (account.get().isMuted()) return Optional.empty();
                     return Optional.of(Format.GLOBAL_CHAT.get(context));
                 }
-                return MessagesService.preProcessMessage(context, Format.GLOBAL_CHAT);
+                // Keep filtering and permission checks on the original bound account.
+                return MessagesService.preProcessMessage(context, account, Format.GLOBAL_CHAT);
             } finally { qqRole.remove(); qqTitle.remove(); saidSource.remove(); }
         }
         return Optional.of((qq ? ChatFormat.qqPrefix(role, title, qqGroup.get()) + " " : "") + "\u00a7f" + literal(name) + "\u00a77: \u00a7f" + literal(text));
