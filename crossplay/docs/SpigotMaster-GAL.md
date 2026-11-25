@@ -4,7 +4,7 @@
 
 ## 适用版本
 
-本文对应 **SpigotMasterGAL 0.4.0**。后端已用 Spigot **1.12.2** 和 **26.2** 完成 Java 协议往返测试。JAR 使用 Java 8 字节码，运行时仍须符合所选 Spigot 核心的要求，测试中分别使用了 Java 8 和 Java 25。Fabric 端已有 **26.2、26.3** 两个构建，接入旧后端时仍需能转换对应 Minecraft 协议的 Via 组件。Bedrock 表单经 BungeeMasterGAL **0.3.0**、Geyser 和 Floodgate 转接，实机按钮验收仍待完成。代理每次进服或换服都重新确认基岩表单能力。
+本文对应 **SpigotMasterGAL 0.4.0**。后端已用 Spigot **1.12.2** 和 **26.2** 完成 Java 协议往返测试。JAR 使用 Java 8 字节码，运行时仍须符合所选 Spigot 核心的要求，测试中分别使用了 Java 8 和 Java 25。Fabric 端已有 **26.2、26.3** 两个构建，接入旧后端时仍需能转换对应 Minecraft 协议的 Via 组件。Bedrock 表单经 BungeeMasterGAL **0.3.1**、Geyser 和 Floodgate 转接，实机按钮验收仍待完成。代理每次进服或换服都重新确认基岩表单能力。
 
 ## 安装与编译依赖
 

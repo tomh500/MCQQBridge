@@ -28,7 +28,7 @@ $build = (New-Item -ItemType Directory -Force -Path "$PSScriptRoot/build").FullN
 $staging = (New-Item -ItemType Directory -Path (Join-Path $build ([Guid]::NewGuid().ToString()))).FullName
 $common = @(Get-ChildItem -LiteralPath "$PSScriptRoot/common/src/main/java" -Recurse -Filter '*.java' |
     ForEach-Object { $_.FullName })
-$artifactNames = @{ spigot = 'SpigotMasterGAL-0.4.0'; bungee = 'BungeeMasterGAL-0.3.0' }
+$artifactNames = @{ spigot = 'SpigotMasterGAL-0.4.0'; bungee = 'BungeeMasterGAL-0.3.1' }
 
 try {
     foreach ($module in $classpaths.Keys) {
