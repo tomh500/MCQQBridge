@@ -1,10 +1,13 @@
 package top.luotiany1.mcqq.crossplay;
 
+import java.util.Collections;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.IntConsumer;
+import java.util.logging.Level;
 import net.md_5.bungee.api.CommandSender;
 import net.md_5.bungee.api.chat.TextComponent;
 import net.md_5.bungee.api.connection.ProxiedPlayer;
@@ -16,8 +19,6 @@ import net.md_5.bungee.api.plugin.Command;
 import net.md_5.bungee.api.plugin.Listener;
 import net.md_5.bungee.api.plugin.Plugin;
 import net.md_5.bungee.event.EventHandler;
-import org.geysermc.cumulus.form.SimpleForm;
-import org.geysermc.cumulus.util.FormImage;
 import org.geysermc.floodgate.api.FloodgateApi;
 
 public final class BungeeMasterGAL extends Plugin implements Listener {
@@ -25,9 +26,15 @@ public final class BungeeMasterGAL extends Plugin implements Listener {
     private final Map<UUID, PendingProbe> pending = new ConcurrentHashMap<>();
     private final Map<ProxiedPlayer, Server> galSessions = new ConcurrentHashMap<>();
     private final AtomicInteger sequence = new AtomicInteger();
+    private FloodgateForms floodgateForms;
 
     @Override
     public void onEnable() {
+        try {
+            floodgateForms = new FloodgateForms(FloodgateApi.class);
+        } catch (ReflectiveOperationException | LinkageError failure) {
+            getLogger().log(Level.WARNING, "Floodgate forms adapter unavailable; using native inventory fallback.", failure);
+        }
         getProxy().registerChannel(ProbeFrame.CLIENT_CHANNEL);
         getProxy().registerChannel(ProbeFrame.BACKEND_CHANNEL);
         getProxy().registerChannel(BedrockForm.CHANNEL);
@@ -135,22 +142,24 @@ public final class BungeeMasterGAL extends Plugin implements Listener {
             replyForm(player, server, request.id, BedrockForm.UNAVAILABLE);
             return;
         }
-        BedrockForm descriptor = request.form;
-        SimpleForm.Builder form = SimpleForm.builder().title(descriptor.title).content(descriptor.content);
-        for (BedrockForm.Button button : descriptor.buttons) {
-            if (button.texture.isEmpty()) {
-                form.button(button.label);
-            } else {
-                form.button(button.label, FormImage.Type.PATH, button.texture);
-            }
-        }
-        boolean sent = floodgate.sendForm(uuid, form.validResultHandler(response -> {
-            int index = response.clickedButtonId();
-            replyForm(player, server, request.id,
-                    index >= 0 && index < descriptor.buttons.size() ? index : BedrockForm.CLOSED);
-        }).closedOrInvalidResultHandler(() -> replyForm(player, server, request.id, BedrockForm.CLOSED)));
+        boolean sent = sendForm(uuid, request.form, index -> {
+            int result = index >= request.form.buttons.size() ? BedrockForm.CLOSED : index;
+            replyForm(player, server, request.id, result);
+        });
         if (!sent) {
             replyForm(player, server, request.id, BedrockForm.UNAVAILABLE);
+        }
+    }
+
+    private boolean sendForm(UUID player, BedrockForm form, IntConsumer result) {
+        if (floodgateForms == null) {
+            return false;
+        }
+        try {
+            return floodgateForms.send(FloodgateApi.getInstance(), player, form, result);
+        } catch (ReflectiveOperationException | LinkageError failure) {
+            getLogger().log(Level.WARNING, "Floodgate could not dispatch a form.", failure);
+            return false;
         }
     }
 
@@ -168,15 +177,13 @@ public final class BungeeMasterGAL extends Plugin implements Listener {
             return;
         }
         Server server = player.getServer();
-        boolean sent = floodgate.sendForm(uuid, SimpleForm.builder()
-                .title("跨端通信")
-                .content("查询当前 Spigot 后端的世界。")
-                .button("查询", FormImage.Type.PATH, "textures/ui/mastergal/probe.png")
-                .validResultHandler(response -> {
-                    if (response.clickedButtonId() == 0 && player.getServer() == server) {
-                        startProbe(player, server, 0, true);
-                    }
-                }));
+        BedrockForm form = new BedrockForm("跨端通信", "查询当前 Spigot 后端的世界。",
+                Collections.singletonList(new BedrockForm.Button("查询", "textures/ui/mastergal/probe.png")));
+        boolean sent = sendForm(uuid, form, index -> {
+            if (index == 0 && player.getServer() == server) {
+                startProbe(player, server, 0, true);
+            }
+        });
         if (!sent) {
             player.sendMessage(new TextComponent("跨端通信表单暂时无法打开。"));
         }
@@ -223,10 +230,12 @@ public final class BungeeMasterGAL extends Plugin implements Listener {
             return;
         }
         if (probe.bedrock) {
-            FloodgateApi.getInstance().sendForm(probe.player.getUniqueId(), SimpleForm.builder()
-                    .title("跨端通信")
-                    .content(world == null ? "当前后端暂未响应。" : "当前世界：" + world)
-                    .button("关闭"));
+            BedrockForm form = new BedrockForm("跨端通信",
+                    world == null ? "当前后端暂未响应。" : "当前世界：" + world,
+                    Collections.singletonList(new BedrockForm.Button("关闭")));
+            if (!sendForm(probe.player.getUniqueId(), form, index -> {})) {
+                probe.player.sendMessage(new TextComponent("跨端通信表单暂时无法打开。"));
+            }
         } else {
             byte[] response = world == null
                     ? ProbeFrame.unavailable(probe.clientId)

@@ -45,8 +45,8 @@ python bedrock/build-pack.py
 
 源码和构建脚本保留在 `crossplay/`，现有 JAR 文件名、Bukkit/Bungee 加载名、Fabric 模组 ID、Java 包名、命令、协议通道和配置路径可继续使用。三个带连字符的名称用于文档、构建组件选项和产品展示。
 
-- 表单部署使用配套的 BungeeMaster-GAL 0.3.0 与 SpigotMaster-GAL 0.4.0。
-- `build/BungeeMasterGAL-0.3.0.jar` 放到 `proxy/plugins/`。
+- 表单部署使用配套的 BungeeMaster-GAL 0.3.1 与 SpigotMaster-GAL 0.4.0。
+- `build/BungeeMasterGAL-0.3.1.jar` 放到 `proxy/plugins/`。
 - `build/SpigotMasterGAL-0.4.0.jar` 放到需要接入的 Spigot 后端的 `plugins/`。
 - 当本地 BedWars1058 21.11.2 构建依赖存在时，脚本也生成 `build/MasterGALMenus-0.4.0.jar`。它是可选适配器，不属于 MasterGAL 核心。
 - `fabric/build/<版本>/libs/FabricMasterGAL-0.3.1+<版本>.jar` 与对应的 Fabric API 一起放到客户端 `mods/`。
