@@ -4,6 +4,7 @@
   "version": "${version}",
   "name": "FabricMaster-GAL",
   "environment": "client",
+  "mixins": ["fabricmastergal.mixins.json"],
   "entrypoints": {
     "client": ["top.luotiany1.mcqq.crossplay.FabricMasterGAL"]
   },

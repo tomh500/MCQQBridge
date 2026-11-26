@@ -20,6 +20,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.Connection;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.codec.StreamCodec;
@@ -37,7 +38,9 @@ public final class FabricMasterGAL implements ClientModInitializer {
     private static final GalEventApi<Minecraft> EVENTS = new GalEventApi<>(GAL);
     private int nextId;
     private long nextHello;
+    private Connection negotiatedConnection;
     private PendingProbe pending;
+    private final SwordGuardClient swordGuard = new SwordGuardClient(GAL);
 
     public static GalApi<Minecraft> api() {
         return GAL;
@@ -82,6 +85,7 @@ public final class FabricMasterGAL implements ClientModInitializer {
             }
         });
         GAL.onEvent("mastergal:menu_open", this::openMenu);
+        swordGuard.register();
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
             dispatcher.register(LiteralArgumentBuilder.<FabricClientCommandSource>literal("crossplayprobe")
                     .executes(context -> sendProbe(context.getSource())));
@@ -89,11 +93,33 @@ public final class FabricMasterGAL implements ClientModInitializer {
                     .executes(context -> sendEvent(context.getSource())));
         });
         ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> resetSession(client));
-        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> resetSession(client));
+        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> client.execute(() -> {
+            if (negotiatedConnection == handler.getConnection()) {
+                negotiatedConnection = null;
+            }
+            if (client.getConnection() == null || client.getConnection() == handler) {
+                resetSession(client);
+            }
+        }));
+        GAL.onReady(client -> {
+            var handler = client.getConnection();
+            if (handler != null) {
+                negotiatedConnection = handler.getConnection();
+            }
+        });
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             long now = System.nanoTime();
-            if (client.player != null && client.getConnection() != null && !GAL.isReady(client)
-                    && (nextHello == 0 || now - nextHello >= 0) && ClientPlayNetworking.canSend(GalPayload.TYPE)) {
+            var handler = client.getConnection();
+            boolean play = handler != null && handler.getConnection().getPacketListener() == handler;
+            if (play) {
+                swordGuard.tick(client);
+            } else {
+                swordGuard.reset();
+            }
+            if (client.player != null && play && !GAL.isReady(client)
+                    && (nextHello == 0 || now - nextHello >= 0)
+                    // Reconfiguration can clear Fabric's Play advertisement on the same proxy socket.
+                    && (ClientPlayNetworking.canSend(GalPayload.TYPE) || handler.getConnection() == negotiatedConnection)) {
                 nextHello = now + TimeUnit.SECONDS.toNanos(2);
                 GAL.begin(client);
             }
@@ -106,6 +132,7 @@ public final class FabricMasterGAL implements ClientModInitializer {
     }
 
     private void resetSession(Minecraft client) {
+        swordGuard.reset();
         pending = null;
         nextHello = 0;
         GAL.close(client);
