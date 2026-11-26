@@ -21,6 +21,7 @@ from . import command_quota, launcher
 from botpy.message import GroupMessage
 from . import media
 from . import chat_mentions
+from . import qq_reply
 from . import status_bot
 from . import system_info
 from . import reply_controls
@@ -96,6 +97,7 @@ class QQBot(botpy.Client):
         self.afterglow = Afterglow(settings["afterglow_connection"]) if settings.get("features", {}).get("private_ai", False) else None
         self.group_names = {}
         self.seen = OrderedDict()
+        self.recent_group_messages = qq_reply.RecentGroupMessages()
         self.cross_group_modes = {}
         self.cross_group_mode_updates = {}
         self.cross_group_receipts = OrderedDict()
@@ -427,7 +429,8 @@ class QQBot(botpy.Client):
         raw = getattr(message, "raw_data", None)
         if raw is None:
             raw = {"content": text, "attachments": [vars(a) for a in (getattr(message, "attachments", None) or [])]}
-        rich = media.extract(raw)
+        current, quote_elements, quote_refs = qq_reply.quote_parts(raw)
+        rich = media.extract(current)
         if group not in self.settings.get("chat_bridge", {}).get("inbound_groups", self.settings.get("allowed_groups", [])) or not member or (not rich["text"].strip() and not rich["media"]) or getattr(author, "bot", False):
             return
         author_fields = raw.get("author") or {}
@@ -439,6 +442,10 @@ class QQBot(botpy.Client):
             group_nickname = ""
         group_nickname = re.sub(r"[\x00-\x1f\x7f<>\[\]]", "", group_nickname).strip()[:128]
         rendered = await self.cross_group_text(message, rich["text"], preserve_faces=True)
+        if cache := getattr(self, "recent_group_messages", None):
+            quote = cache.quote(group, message.id, raw, quote_elements, quote_refs)
+            if quote:
+                rendered = rendered[:2000 - len(quote)].rstrip() + quote
         try:
             result = await self.call_service("/v1/chat/from-qq", {
                 "app_id": self.settings["app_id"], "group_openid": group, "member_openid": member,
@@ -976,6 +983,9 @@ class QQBot(botpy.Client):
         reports = getattr(self, "daily_reports", None)
         authorized = self.settings.get("allowed_groups", [])
         llm_mention = explicit_at and text and not text.startswith("/")
+        if not already_seen and member and group in authorized:
+            if cache := getattr(self, "recent_group_messages", None):
+                cache.remember(group, message.id, raw)
         if llm_mention and group in allowed and member and self.duplicate("group_llm", message.id):
             return
         if not already_seen and group_ai and member and group in authorized:

@@ -305,6 +305,46 @@ class ChatTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["group_nickname"], "群内发件人")
         self.assertEqual(payload["nickname"], "小明")
 
+    async def test_game_relay_adds_one_same_group_reply_excerpt(self):
+        from mcqq.qq_reply import RecentGroupMessages
+
+        bot = self.cross_group_bot()
+        bot.recent_group_messages = RecentGroupMessages()
+        bot.relay_group = QQBot.relay_group.__get__(bot)
+        bot.call_service = AsyncMock(return_value={})
+        sender_id = "A" * 32
+        original = self.cross_group_message("original", "出发", raw={
+            "content": f"出发 <@{sender_id}>",
+            "message_scene": {"ext": ["msg_idx=original-index"]},
+            "author": {"member_nickname": "群内原作者", "member_openid": sender_id},
+        })
+        await bot.on_group_message_create(original)
+        reply = {"content": "收到", "message_type": 103,
+                 "message_scene": {"ext": ["msg_idx=reply-index", "ref_msg_idx=original-index"]},
+                 "msg_elements": [{"msg_idx": "original-index", "content": "出发",
+                                   "attachments": [{"content_type": "image/png", "url": "https://qpic.cn/a.png"}]}]}
+        await bot.on_group_message_create(self.cross_group_message("reply", "收到", raw=reply))
+        payload = bot.call_service.call_args.args[1]
+        self.assertEqual(payload["text"], "收到 [回复 群内原作者:出发 @群成员]")
+        self.assertEqual(payload["media"], [])
+        self.assertNotIn(sender_id, payload["text"])
+
+        await bot.on_group_message_create(self.cross_group_message("foreign", "收到", group="other", raw={
+            "content": "收到", "message_reference": {"message_id": "original", "group_openid": "group"},
+            "referenced_message": {"group_openid": "group", "content": "出发"},
+        }))
+        self.assertEqual(bot.call_service.call_args.args[1]["text"], "收到")
+        await bot.on_group_message_create(self.cross_group_message("uncached", "收到", group="other", raw={
+            "content": "收到", "message_reference": {"message_id": "original"},
+        }))
+        self.assertEqual(bot.call_service.call_args.args[1]["text"], "收到")
+
+        inline = {"content": "收到", "message_type": 103, "ref_msg_idx": "inline-index",
+                  "msg_elements": [{"msg_idx": "inline-index", "author": {"username": sender_id},
+                                    "content": f"联系 {sender_id}"}]}
+        await bot.on_group_message_create(self.cross_group_message("inline", "收到", raw=inline))
+        self.assertEqual(bot.call_service.call_args.args[1]["text"], "收到 [回复 群友:联系 [已隐藏]]")
+
     async def test_cross_group_mode_renewal_scope_and_expiry(self):
         bot = self.cross_group_bot()
         message = self.cross_group_message

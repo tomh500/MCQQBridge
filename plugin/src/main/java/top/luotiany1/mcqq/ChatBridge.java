@@ -177,10 +177,12 @@ public final class ChatBridge implements Listener {
         }
     }
 
-    private BaseComponent mediaMessage(String text, JsonArray attachments, TextComponent mention) {
+    private BaseComponent mediaMessage(String text, JsonArray attachments, String marker, String name, String insertion) {
         TextComponent root = new TextComponent("");
-        for (BaseComponent part : TextComponent.fromLegacyText(text)) root.addExtra(part);
-        if (mention != null) root.addExtra(mention);
+        for (BaseComponent part : TextComponent.fromLegacyText(text)) {
+            if (marker == null) root.addExtra(part);
+            else addSenderComponents(root, (TextComponent) part, marker, name, insertion);
+        }
         for (JsonElement value : attachments) {
             JsonObject item = value.getAsJsonObject();
             boolean sticker = item.get("kind").getAsString().equals("sticker");
@@ -201,31 +203,47 @@ public final class ChatBridge implements Listener {
         return root;
     }
 
-    private static TextComponent mentionLabel(JsonObject item) {
+    static void addSenderComponents(TextComponent root, TextComponent part, String marker, String name, String insertion) {
+        String[] chunks = part.getText().split(Pattern.quote(marker), -1);
+        for (int i = 0; i < chunks.length; i++) {
+            if (i != 0) {
+                TextComponent sender = part.duplicate();
+                sender.setText(name);
+                if (insertion != null) {
+                    sender.setInsertion(insertion);
+                    sender.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
+                        new BaseComponent[]{new TextComponent("在 /said 草稿中按住 Shift 点击插入提及")}));
+                }
+                root.addExtra(sender);
+            }
+            if (!chunks[i].isEmpty()) {
+                TextComponent segment = part.duplicate();
+                segment.setText(chunks[i]);
+                root.addExtra(segment);
+            }
+        }
+    }
+
+    private static String mentionInsertion(JsonObject item) {
         if (!item.has("mention_name") || !item.has("mention_ref")) return null;
         String name = literal(item.get("mention_name").getAsString());
         String ref = "〔qq:" + item.get("mention_ref").getAsString() + "〕";
         if (name.isEmpty() || !MENTION_REF.matcher(ref).matches()) return null;
-        TextComponent label = new TextComponent(" [@" + name + "]");
-        label.setColor(net.md_5.bungee.api.ChatColor.AQUA);
-        label.setInsertion("@" + name + ref + " ");
-        label.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
-            new BaseComponent[]{new TextComponent("在 /said 草稿中按住 Shift 点击插入提及")}));
-        return label;
+        return "@" + name + ref + " ";
     }
 
-    private void broadcastMedia(String text, JsonArray attachments, TextComponent mention) {
-        if (attachments.size() == 0 && mention == null) { broadcast(text, null); return; }
-        BaseComponent message = mediaMessage(text, attachments, mention);
-        BaseComponent bedrock = mention == null ? message : mediaMessage(text, attachments, null);
+    private void broadcastMedia(String text, JsonArray attachments, String marker, String name, String insertion) {
+        if (attachments.size() == 0 && insertion == null) { broadcast(text, null); return; }
+        BaseComponent message = mediaMessage(text, attachments, marker, name, insertion);
+        BaseComponent plain = insertion == null ? message : mediaMessage(text, attachments, marker, name, null);
         List<String> direct = new ArrayList<>(servers());
         direct.removeAll(bedWarsLobbyServers());
         for (ProxiedPlayer player : plugin.getProxy().getPlayers()) {
             if (player.getServer() != null && direct.contains(player.getServer().getInfo().getName())) {
-                player.sendMessage(mention != null && ChatFormat.isBedrock(player.getUniqueId()) ? bedrock : message);
+                player.sendMessage(insertion != null && ChatFormat.isBedrock(player.getUniqueId()) ? plain : message);
             }
         }
-        sendToBedWarsLobbies(new BaseComponent[]{bedrock}, null);
+        sendToBedWarsLobbies(new BaseComponent[]{message}, null);
     }
 
     private void syncTitles(JsonArray snapshot) throws IOException {
@@ -254,16 +272,20 @@ public final class ChatBridge implements Listener {
             for (JsonElement element : batch.getAsJsonArray("messages")) {
                 JsonObject item = element.getAsJsonObject(); long id = item.get("id").getAsLong();
                 if (!delivered.contains(id)) {
+                    boolean console = item.has("source") && item.get("source").getAsString().equals("console");
+                    String insertion = !console && mentionsEnabled ? mentionInsertion(item) : null;
+                    String marker = insertion == null ? null : "\uE000" + UUID.randomUUID() + "\uE001";
+                    String name = console ? "" : literal(item.get("name").getAsString());
                     qqGroup.set(item.has("group_name") ? item.get("group_name").getAsString() : "群内");
                     Optional<String> message;
-                    try { message = item.has("source") && item.get("source").getAsString().equals("console")
+                    try { message = console
                         ? Optional.of("§7[Console] §f" + literal(item.get("text").getAsString()))
-                        : render(item.get("uuid").getAsString(), item.get("name").getAsString(), literal(item.get("text").getAsString()), true,
+                        : render(item.get("uuid").getAsString(), marker == null ? name : marker, literal(item.get("text").getAsString()), true,
                         item.has("role") ? item.get("role").getAsString() : "member",
                         item.has("qq_id") ? item.get("qq_id").getAsString() : "",
                         item.has("title") && !item.get("title").isJsonNull() ? item.get("title").getAsString() : null); } finally { qqGroup.remove(); }
                     message.ifPresent(text -> broadcastMedia(text,
-                        item.has("media") ? item.getAsJsonArray("media") : new JsonArray(), mentionsEnabled ? mentionLabel(item) : null));
+                        item.has("media") ? item.getAsJsonArray("media") : new JsonArray(), marker, name, insertion));
                     delivered.add(id);
                 }
                 JsonObject ack = new JsonObject(); JsonArray ids = new JsonArray(); ids.add(id); ack.add("ids", ids);
