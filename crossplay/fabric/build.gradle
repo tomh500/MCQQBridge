@@ -11,7 +11,7 @@ if (!apiVersions.containsKey(target)) {
 
 layout.buildDirectory.set(layout.projectDirectory.dir("build/${target}"))
 group = 'top.luotiany1'
-version = "0.3.1+${target}"
+version = "0.4.0+${target}"
 base { archivesName = 'FabricMasterGAL' }
 repositories { mavenCentral() }
 
@@ -26,6 +26,7 @@ dependencies {
 
 sourceSets.main.java {
     srcDir '../common/src/main/java'
+    srcDir "src/${target}/java"
     exclude '**/BedrockForm.java'
 }
 tasks.withType(JavaCompile).configureEach {
