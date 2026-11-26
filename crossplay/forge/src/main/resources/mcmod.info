@@ -1,0 +1,9 @@
+[
+    {
+        "modid": "forgemaster",
+        "name": "ForgeMaster",
+        "description": "MasterGAL client transport for Forge 1.12.2",
+        "version": "${version}",
+        "mcversion": "1.12.2"
+    }
+]

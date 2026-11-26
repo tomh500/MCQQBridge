@@ -49,3 +49,6 @@ group-ai.yml
 group-ai-images/
 backups/
 /SpigotMaster-GAL/
+
+/.local/
+!crossplay/forge/gradle/wrapper/gradle-wrapper.jar
