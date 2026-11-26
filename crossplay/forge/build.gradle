@@ -1,0 +1,51 @@
+buildscript {
+    repositories {
+        mavenCentral()
+        maven { url = 'https://maven.minecraftforge.net/' }
+    }
+    dependencies {
+        classpath 'net.minecraftforge.gradle:ForgeGradle:3.0.197'
+    }
+}
+
+apply plugin: 'net.minecraftforge.gradle'
+
+group = 'top.luotiany1'
+version = '0.1.0'
+archivesBaseName = 'ForgeMaster'
+sourceCompatibility = targetCompatibility = '1.8'
+
+minecraft {
+    mappings channel: 'snapshot', version: '20171003-1.12'
+    runs {
+        client { workingDirectory project.file('run') }
+    }
+}
+
+dependencies {
+    minecraft 'net.minecraftforge:forge:1.12.2-14.23.5.2860'
+}
+
+sourceSets.main.java {
+    srcDir '../common/src/main/java'
+    exclude '**/BedrockForm.java'
+}
+
+tasks.withType(JavaCompile) {
+    options.encoding = 'UTF-8'
+}
+
+processResources {
+    inputs.property 'version', project.version
+    filesMatching('mcmod.info') {
+        expand(version: project.version)
+    }
+}
+
+task devJar(type: Jar) {
+    classifier = 'dev'
+    from sourceSets.main.output
+}
+
+assemble.dependsOn devJar
+jar.finalizedBy 'reobfJar'

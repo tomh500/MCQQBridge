@@ -7,6 +7,7 @@
 - [SpigotMaster-GAL](docs/SpigotMaster-GAL.md)
 - [BungeeMaster-GAL](docs/BungeeMaster-GAL.md)
 - [FabricMaster-GAL](docs/FabricMaster-GAL.md)
+- [ForgeMaster（1.12.2）](../CONTRACT.md)
 - [BedrockPack](docs/BedrockPack.md)
 - [界面映射与验收](docs/MenuMapping.md)
 - [SpigotMaster 事件迁移矩阵](docs/EventCompatibility.md)
