@@ -1,4 +1,8 @@
-# Forge / NeoForge client (experimental)
+# Forge / NeoForge client
+
+Minecraft 1.12.2 with Forge has a separate [Java 8 client mod](forge112/README.md). It uses the existing MCQQBridge chat links.
+
+## Forge / NeoForge 26.x (experimental)
 
 Shared 26.2/26.3 client-only image logic and chat mixins live in `src/main/java`; `forge` and `neoforge` provide loader-specific metadata and builds. The implementation targets the unobfuscated 26.x client APIs and does not target earlier versions. Do not install a Fabric, Forge, or NeoForge image mod together: they share the same mod ID.
 

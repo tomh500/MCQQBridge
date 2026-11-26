@@ -1,0 +1,10 @@
+[
+  {
+    "modid": "mcqq_images",
+    "name": "MCQQ Images",
+    "description": "QQ chat image previews for Minecraft Forge 1.12.2",
+    "version": "1.0.0",
+    "mcversion": "1.12.2",
+    "authorList": ["luotiany1"]
+  }
+]

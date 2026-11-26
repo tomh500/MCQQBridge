@@ -7,7 +7,7 @@ QQ 官方机器人与 Minecraft 群服互通框架。Java 包与构建 Group ID 
 - `mcqq`：Python 3.11+、官方 QQ Bot SDK、aiohttp；提供绑定、身份关联、消息队列和媒体服务。
 - `plugin`：BungeeCord 代理插件 MCQQBridge；聊天需要 BungeeChat，基岩关联需要 Floodgate。
 - `spigot`：Spigot 1.12.2+ 子服插件 MCQQSpigot；保留 `/said`，支持按群注册命令，提供异步存取接口。
-- `fabric`：可选图片客户端，[通用 Fabric 源码与构建说明](fabric/universal/README.md)；26.2、26.3 为重点支持版本，旧版为 legacy support。Forge 和 NeoForge 原生支持正在开发。
+- `fabric`：可选图片客户端，[通用 Fabric 源码与构建说明](fabric/universal/README.md)；26.2、26.3 为重点支持版本，旧版为 legacy support。另有 [Forge 1.12.2 客户端](multiloader/forge112/README.md) 和 [Forge／NeoForge 26.x 实验版本](multiloader/README.md)。
 - [SpigotMaster-GAL、BungeeMaster-GAL、FabricMaster-GAL](crossplay/README.md) 提供 Minecraft 跨端事件、请求与界面能力，各组件可独立构建和安装。
 
 ## 源码目录
