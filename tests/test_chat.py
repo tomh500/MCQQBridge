@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
 from aiohttp.test_utils import TestClient, TestServer
+from botpy.api import BotAPI
 from mcqq.bot import QQBot
 from mcqq.service import create_app
 from mcqq.store import Store
@@ -53,14 +54,43 @@ class ChatTests(unittest.IsolatedAsyncioTestCase):
         store = Store(self.cfg["database"])
         store.bind(dict(app_id="app", group_openid="group", member_openid="member", event_id="bind", action="bind", platform="java", name="Steve"),
                    dict(uuid=PLAYER, name="Steve", platform="java"))
-        await self.post("from-qq", self.qq(nickname="QQ 名字", group_nickname="群昵称"))
+        for event, fields in (
+            ("first", {"nickname": "QQ 名字", "role": "admin"}),
+            ("card", {"nickname": "QQ 名字", "group_nickname": "群昵称", "role": "admin"}),
+            ("cached", {"nickname": "更新的 QQ 名字", "role": "admin"}),
+        ):
+            self.assertEqual((await self.post("from-qq", dict(self.qq(**fields), event_id=event))).status, 200)
         messages = (await (await self.post("to-game", {}, True)).json())["messages"]
-        self.assertEqual((messages[0]["uuid"], messages[0]["name"]), (PLAYER, "Steve"))
+        self.assertEqual([(m["uuid"], m["name"], m["role"], m["qq_id"]) for m in messages], [
+            (PLAYER, "Steve", "admin", "member"),
+            (PLAYER, "群昵称", "admin", "member"),
+            (PLAYER, "群昵称", "admin", "member"),
+        ])
         game = dict(uuid=PLAYER, name="Steve", server="other", event_id="game1", text="/op  @a %s & !")
         self.assertEqual((await self.post("from-game", game, True)).status, 403)
         game["server"] = "survival"
         self.assertEqual((await self.post("from-game", game, True)).status, 200)
         self.assertEqual((await (await self.post("to-qq", {})).json())["messages"][0]["text"], "[游戏内]群昵称:"+game["text"])
+
+    async def test_unbound_sender_names_are_scoped_to_the_source_group(self):
+        self.cfg["allowed_groups"] = ["group", "other"]
+        cases = (
+            ("other", {"group_nickname": "乙群昵称", "nickname": "QQ 全局名"}, "乙群昵称"),
+            ("group", {"nickname": "QQ 全局名"}, "QQ 全局名"),
+            ("group", {"group_nickname": "甲群昵称", "nickname": "QQ 全局名"}, "甲群昵称"),
+            ("group", {"nickname": "QQ 新名字", "group_nickname": "  "}, "甲群昵称"),
+            ("group", {"group_nickname": "甲群新昵称", "nickname": "QQ 新名字"}, "甲群新昵称"),
+            ("other", {}, "乙群昵称"),
+            ("group", {"nickname": "PRIVATE-MEMBER-ID", "group_nickname": "private-member-id",
+                       "member_openid": "private-member-id"}, "群友"),
+        )
+        for index, (group, fields, _) in enumerate(cases):
+            data = {**self.qq(), **fields, "group_openid": group, "event_id": f"event-{index}"}
+            self.assertEqual((await self.post("from-qq", data)).status, 200)
+        messages = (await (await self.post("to-game", {}, True)).json())["messages"]
+        self.assertEqual([(m["uuid"], m["name"]) for m in messages], [
+            ("", expected) for _, _, expected in cases
+        ])
 
     async def test_explicit_group_routes_and_alias(self):
         self.cfg["allowed_groups"] = ["group", "other"]
@@ -91,6 +121,76 @@ class ChatTests(unittest.IsolatedAsyncioTestCase):
         game.update(event_id="none", group="")
         self.assertEqual((await self.post("from-game", game, True)).status, 200)
         self.assertEqual(len((await (await self.post("to-qq", {})).json())["messages"]), 1)
+
+    async def test_said_mention_checks_group_and_uses_botpy_markdown(self):
+        self.cfg["allowed_groups"] = ["group", "other"]
+        self.cfg["chat_bridge"]["mention_groups"] = ["group", "other"]
+        member = "A" * 32
+        for group, sender in [("group", member), ("other", "B" * 32)]:
+            data = self.qq(nickname="QQ昵称", group_nickname="同名 群友")
+            data.update(group_openid=group, member_openid=sender, text=f'hi <@!{sender}>')
+            self.assertEqual((await self.post("from-qq", data)).status, 200)
+        incoming = (await (await self.post("to-game", {}, True)).json())["messages"]
+        self.assertEqual(incoming[0]["mention_name"], "同名 群友")
+        self.assertEqual(incoming[0]["text"], "hi @群成员")
+        token = incoming[0]["mention_ref"]
+        self.assertRegex(token, r"^[0-9a-f]{16}$")
+        self.assertNotEqual(token, incoming[1]["mention_ref"])
+
+        game = dict(uuid=PLAYER, name="Steve", server="lobby", event_id="mention",
+                    text=f'hi @同名 群友〔qq:{token}〕 <qqbot-at-everyone /> <@all> @everyone')
+        self.assertEqual((await self.post("from-game", game, True)).status, 200)
+        outgoing = (await (await self.post("to-qq", {})).json())["messages"]
+        self.assertEqual([item["group"] for item in outgoing], ["group", "other"])
+        self.assertNotIn("mention", outgoing[1])
+        self.assertNotIn(token, outgoing[0]["text"])
+        self.assertNotIn("<", outgoing[0]["text"])
+        self.assertNotIn("@everyone", outgoing[0]["text"])
+
+        bot = QQBot.__new__(QQBot)
+        bot.settings = self.cfg
+        state = {"allow_proactive_msg": True, "member_openid": "C" * 32}
+        profile = {"member_openid": member, "bot": False}
+        request = AsyncMock(side_effect=[state, profile, {}])
+        bot.api = BotAPI(SimpleNamespace(request=request))
+        await bot.deliver_game_chat(outgoing[0])
+        self.assertEqual([call.args[0].url.rsplit("/v2/", 1)[-1] for call in request.await_args_list],
+                         ["groups/group/bot_state", f"groups/group/members/{member}", "groups/group/messages"])
+        body = request.await_args.kwargs["json"]
+        self.assertEqual(body["msg_type"], 2)
+        self.assertIsNone(body["msg_id"])
+        content = body["markdown"]["content"]
+        self.assertEqual(content.count("<"), 1)
+        self.assertIn(f'hi <qqbot-at-user id="{member}" /> ', content)
+        self.assertNotIn("@everyone", content)
+
+        for checks in ([{"allow_proactive_msg": False}, {}],
+                       [state, {"member_openid": "D" * 32, "bot": False}, {}],
+                       [state, RuntimeError("member removed"), {}],
+                       [state, {"member_openid": member, "bot": True}, {}]):
+            request.side_effect = checks
+            await bot.deliver_game_chat(outgoing[0])
+            body = request.await_args.kwargs["json"]
+            self.assertEqual(body["msg_type"], 0)
+            self.assertEqual(body["content"], outgoing[0]["text"])
+        request.side_effect = [state, profile, TimeoutError()]
+        request.reset_mock()
+        with self.assertRaises(TimeoutError):
+            await bot.deliver_game_chat(outgoing[0])
+        self.assertEqual(request.await_count, 3)
+
+        for event, target, body in [
+            ("other", "other", game["text"]),
+            ("forged", "group", game["text"].replace(token, "0" * 16)),
+            ("renamed", "group", game["text"].replace("同名 群友", "其他人")),
+        ]:
+            request_data = dict(game, event_id=event, group=target, text=body)
+            self.assertEqual((await self.post("from-game", request_data, True)).status, 200)
+        with Store(self.cfg["database"]).connect() as db:
+            db.execute("UPDATE chat_mention_refs SET expires=0")
+        self.assertEqual((await self.post("from-game", dict(game, event_id="expired", group="group"), True)).status, 200)
+        outgoing = (await (await self.post("to-qq", {})).json())["messages"]
+        self.assertTrue(all("mention" not in item for item in outgoing[1:]))
 
     async def test_invalid_outbound_configuration_rejected(self):
         for value in ("group", ["unknown"], None):
@@ -195,7 +295,7 @@ class ChatTests(unittest.IsolatedAsyncioTestCase):
         text = f"<@{member}> <@{'B' * 32}> 你好"
         message = self.cross_group_message("mention", text, raw={
             "content": text,
-            "author": {"member_nickname": "群内发件人"},
+            "author": {"card": "群内发件人", "nickname": "全局昵称"},
             "mentions": [{"member_openid": member, "member_nickname": "群内称呼"}],
         })
         await QQBot.relay_group(bot, message)
@@ -203,6 +303,7 @@ class ChatTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(path, "/v1/chat/from-qq")
         self.assertEqual(payload["text"], "[tag 群内称呼] [tag 未知群成员] 你好")
         self.assertEqual(payload["group_nickname"], "群内发件人")
+        self.assertEqual(payload["nickname"], "小明")
 
     async def test_cross_group_mode_renewal_scope_and_expiry(self):
         bot = self.cross_group_bot()

@@ -18,6 +18,7 @@ chat_bridge:
   group_aliases: {}
   command_targets: []
   outbound_groups: []
+  mention_groups: []
   command_groups: []
 bot_roles:
   owners: []
