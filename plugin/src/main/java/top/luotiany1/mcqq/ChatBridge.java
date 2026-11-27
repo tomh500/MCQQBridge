@@ -8,6 +8,7 @@ import dev.aura.bungeechat.api.placeholder.PlaceHolder;
 import dev.aura.bungeechat.api.placeholder.PlaceHolderManager;
 import dev.aura.bungeechat.message.Format;
 import dev.aura.bungeechat.message.MessagesService;
+import dev.aura.bungeechat.message.PlaceHolderUtil;
 import net.md_5.bungee.api.connection.ProxiedPlayer;
 import net.md_5.bungee.api.connection.Server;
 import net.md_5.bungee.api.chat.TextComponent;
@@ -22,17 +23,21 @@ import net.md_5.bungee.config.YamlConfiguration;
 import net.md_5.bungee.event.EventHandler;
 import net.md_5.bungee.chat.ComponentSerializer;
 import java.io.*;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Proxy;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
 
 /** All bridge chat is rendered and routed at the proxy, never dispatched as a command. */
 public final class ChatBridge implements Listener {
     static final String CHANNEL = "mcqq:chat";
     private static final String BEDWARS_LOBBY_CHANNEL = "mcqq:bwlobby";
+    private static final Pattern MENTION_REF = Pattern.compile("〔qq:[0-9a-f]{16}〕");
     private final MCQQBridge plugin;
     private final Set<Long> delivered = new HashSet<>();
     private final Map<UUID, Long> cooldown = new HashMap<>();
@@ -40,6 +45,7 @@ public final class ChatBridge implements Listener {
         TimeUnit.SECONDS, new java.util.concurrent.ArrayBlockingQueue<Runnable>(128));
     private volatile boolean busy;
     private volatile boolean commandBusy;
+    private volatile boolean mentionsEnabled;
     private final ThreadLocal<String> qqGroup = new ThreadLocal<>();
     private final ThreadLocal<String> qqRole = new ThreadLocal<>();
     private final ThreadLocal<String> qqTitle = new ThreadLocal<>();
@@ -87,6 +93,22 @@ public final class ChatBridge implements Listener {
         return text.replace('\u00a7', '?').replaceAll("[\\p{Cc}\\p{Cf}]", " ");
     }
 
+    static BungeeChatAccount withSenderName(BungeeChatAccount account, String displayName) {
+        String escapedName = PlaceHolderUtil.escape(literal(displayName));
+        return (BungeeChatAccount) Proxy.newProxyInstance(
+            BungeeChatAccount.class.getClassLoader(), new Class<?>[]{BungeeChatAccount.class},
+            (view, method, args) -> {
+                if (method.getName().equals("getName") || method.getName().equals("getDisplayName")) {
+                    return escapedName;
+                }
+                try {
+                    return method.invoke(account, args);
+                } catch (InvocationTargetException e) {
+                    throw e.getCause();
+                }
+            });
+    }
+
     private Optional<String> render(String uuid, String name, String text, boolean qq) {
         return render(uuid, name, text, qq, "member");
     }
@@ -118,7 +140,8 @@ public final class ChatBridge implements Listener {
         String title = qq ? (selfTitle == null ? titleFor(memberOpenid) : selfTitle) : "";
         Optional<BungeeChatAccount> account = uuid.isEmpty() ? Optional.empty() : AccountManager.getAccount(UUID.fromString(uuid));
         if (account.isPresent()) {
-            BungeeChatContext context = new BungeeChatContext(account.get(), text);
+            BungeeChatAccount sender = account.get();
+            BungeeChatContext context = new BungeeChatContext(qq ? withSenderName(sender, name) : sender, text);
             try {
                 if (qq) { qqRole.set(role); qqTitle.set(title); }
                 else saidSource.set(true);
@@ -126,7 +149,8 @@ public final class ChatBridge implements Listener {
                     if (account.get().isMuted()) return Optional.empty();
                     return Optional.of(Format.GLOBAL_CHAT.get(context));
                 }
-                return MessagesService.preProcessMessage(context, Format.GLOBAL_CHAT);
+                // Keep filtering and permission checks on the original bound account.
+                return MessagesService.preProcessMessage(context, account, Format.GLOBAL_CHAT);
             } finally { qqRole.remove(); qqTitle.remove(); saidSource.remove(); }
         }
         return Optional.of((qq ? ChatFormat.qqPrefix(role, title, qqGroup.get()) + " " : "") + "\u00a7f" + literal(name) + "\u00a77: \u00a7f" + literal(text));
@@ -153,9 +177,12 @@ public final class ChatBridge implements Listener {
         }
     }
 
-    private BaseComponent mediaMessage(String text, JsonArray attachments) {
+    private BaseComponent mediaMessage(String text, JsonArray attachments, String marker, String name, String insertion) {
         TextComponent root = new TextComponent("");
-        for (BaseComponent part : TextComponent.fromLegacyText(text)) root.addExtra(part);
+        for (BaseComponent part : TextComponent.fromLegacyText(text)) {
+            if (marker == null) root.addExtra(part);
+            else addSenderComponents(root, (TextComponent) part, marker, name, insertion);
+        }
         for (JsonElement value : attachments) {
             JsonObject item = value.getAsJsonObject();
             boolean sticker = item.get("kind").getAsString().equals("sticker");
@@ -176,13 +203,45 @@ public final class ChatBridge implements Listener {
         return root;
     }
 
-    private void broadcastMedia(String text, JsonArray attachments) {
-        if (attachments.size() == 0) { broadcast(text, null); return; }
-        BaseComponent message = mediaMessage(text, attachments);
+    static void addSenderComponents(TextComponent root, TextComponent part, String marker, String name, String insertion) {
+        String[] chunks = part.getText().split(Pattern.quote(marker), -1);
+        for (int i = 0; i < chunks.length; i++) {
+            if (i != 0) {
+                TextComponent sender = part.duplicate();
+                sender.setText(name);
+                if (insertion != null) {
+                    sender.setInsertion(insertion);
+                    sender.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
+                        new BaseComponent[]{new TextComponent("在 /said 草稿中按住 Shift 点击插入提及")}));
+                }
+                root.addExtra(sender);
+            }
+            if (!chunks[i].isEmpty()) {
+                TextComponent segment = part.duplicate();
+                segment.setText(chunks[i]);
+                root.addExtra(segment);
+            }
+        }
+    }
+
+    private static String mentionInsertion(JsonObject item) {
+        if (!item.has("mention_name") || !item.has("mention_ref")) return null;
+        String name = literal(item.get("mention_name").getAsString());
+        String ref = "〔qq:" + item.get("mention_ref").getAsString() + "〕";
+        if (name.isEmpty() || !MENTION_REF.matcher(ref).matches()) return null;
+        return "@" + name + ref + " ";
+    }
+
+    private void broadcastMedia(String text, JsonArray attachments, String marker, String name, String insertion) {
+        if (attachments.size() == 0 && insertion == null) { broadcast(text, null); return; }
+        BaseComponent message = mediaMessage(text, attachments, marker, name, insertion);
+        BaseComponent plain = insertion == null ? message : mediaMessage(text, attachments, marker, name, null);
         List<String> direct = new ArrayList<>(servers());
         direct.removeAll(bedWarsLobbyServers());
         for (ProxiedPlayer player : plugin.getProxy().getPlayers()) {
-            if (player.getServer() != null && direct.contains(player.getServer().getInfo().getName())) player.sendMessage(message);
+            if (player.getServer() != null && direct.contains(player.getServer().getInfo().getName())) {
+                player.sendMessage(insertion != null && ChatFormat.isBedrock(player.getUniqueId()) ? plain : message);
+            }
         }
         sendToBedWarsLobbies(new BaseComponent[]{message}, null);
     }
@@ -208,19 +267,25 @@ public final class ChatBridge implements Listener {
         busy = true;
         try {
             JsonObject batch = call("to-game", new JsonObject());
+            mentionsEnabled = batch.has("mentions_enabled") && batch.get("mentions_enabled").getAsBoolean();
             if (batch.has("title_snapshot")) syncTitles(batch.getAsJsonArray("title_snapshot"));
             for (JsonElement element : batch.getAsJsonArray("messages")) {
                 JsonObject item = element.getAsJsonObject(); long id = item.get("id").getAsLong();
                 if (!delivered.contains(id)) {
+                    boolean console = item.has("source") && item.get("source").getAsString().equals("console");
+                    String insertion = !console && mentionsEnabled ? mentionInsertion(item) : null;
+                    String marker = insertion == null ? null : "\uE000" + UUID.randomUUID() + "\uE001";
+                    String name = console ? "" : literal(item.get("name").getAsString());
                     qqGroup.set(item.has("group_name") ? item.get("group_name").getAsString() : "群内");
                     Optional<String> message;
-                    try { message = item.has("source") && item.get("source").getAsString().equals("console")
+                    try { message = console
                         ? Optional.of("§7[Console] §f" + literal(item.get("text").getAsString()))
-                        : render(item.get("uuid").getAsString(), item.get("name").getAsString(), literal(item.get("text").getAsString()), true,
+                        : render(item.get("uuid").getAsString(), marker == null ? name : marker, literal(item.get("text").getAsString()), true,
                         item.has("role") ? item.get("role").getAsString() : "member",
                         item.has("qq_id") ? item.get("qq_id").getAsString() : "",
                         item.has("title") && !item.get("title").isJsonNull() ? item.get("title").getAsString() : null); } finally { qqGroup.remove(); }
-                    message.ifPresent(text -> broadcastMedia(text, item.has("media") ? item.getAsJsonArray("media") : new JsonArray()));
+                    message.ifPresent(text -> broadcastMedia(text,
+                        item.has("media") ? item.getAsJsonArray("media") : new JsonArray(), marker, name, insertion));
                     delivered.add(id);
                 }
                 JsonObject ack = new JsonObject(); JsonArray ids = new JsonArray(); ids.add(id); ack.add("ids", ids);
@@ -294,7 +359,8 @@ public final class ChatBridge implements Listener {
             if (content == null) return;
             queue.execute(() -> {
                 try {
-                    Optional<String> rendered = render(player.getUniqueId().toString(), player.getName(), content, false);
+                    String display = mentionsEnabled ? MENTION_REF.matcher(content).replaceAll("") : content;
+                    Optional<String> rendered = render(player.getUniqueId().toString(), player.getName(), display, false);
                     if (!rendered.isPresent()) return;
                     broadcast(rendered.get(), lobbyChat ? serverName : null);
                     JsonObject data = new JsonObject();

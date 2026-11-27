@@ -1,9 +1,17 @@
 """Authenticated, bounded store-and-forward queues for the single local proxy."""
 import json
+import secrets
 import time
 import uuid
 
 from aiohttp import web
+
+from . import chat_mentions
+
+
+def display_nickname(name, member_openid):
+    name = name.strip()
+    return name if name.casefold() != member_openid.casefold() else ""
 
 
 def register(app, cfg, store, identity, resolve_media):
@@ -28,6 +36,10 @@ def register(app, cfg, store, identity, resolve_media):
             CREATE TABLE IF NOT EXISTS chat_group_names (
                 subject TEXT NOT NULL, group_id TEXT NOT NULL, nickname TEXT NOT NULL,
                 PRIMARY KEY(subject, group_id)
+            );
+            CREATE TABLE IF NOT EXISTS chat_mention_refs (
+                token TEXT PRIMARY KEY, group_id TEXT NOT NULL, member_openid TEXT NOT NULL,
+                nickname TEXT NOT NULL, expires REAL NOT NULL
             );
         """)
 
@@ -84,19 +96,45 @@ def register(app, cfg, store, identity, resolve_media):
                     raise ValueError("nickname")
                 if not isinstance(group_nickname, str) or len(group_nickname) > 128:
                     raise ValueError("group_nickname")
+                member = data["member_openid"]
+                group_key = (subject, data["group_openid"])
+                group_nickname = display_nickname(group_nickname, member)
                 if group_nickname:
                     db.execute("INSERT OR REPLACE INTO chat_group_names VALUES(?,?,?)",
-                               (subject, data["group_openid"], group_nickname))
-                if nickname:
-                    db.execute("INSERT OR REPLACE INTO chat_names VALUES(?,?,?)", (subject, data["group_openid"], nickname))
-                cached_name = db.execute("SELECT nickname FROM chat_names WHERE subject=? AND group_id=?", (subject, data["group_openid"])).fetchone()
+                               (*group_key, group_nickname))
+                else:
+                    cached_group_name = db.execute(
+                        "SELECT nickname FROM chat_group_names WHERE subject=? AND group_id=?", group_key).fetchone()
+                    if cached_group_name:
+                        group_nickname = display_nickname(cached_group_name[0], member)
+                qq_name = display_nickname(nickname, member)
+                if qq_name:
+                    db.execute("INSERT OR REPLACE INTO chat_names VALUES(?,?,?)", (*group_key, qq_name))
+                else:
+                    cached_name = db.execute(
+                        "SELECT nickname FROM chat_names WHERE subject=? AND group_id=?", group_key).fetchone()
+                    if cached_name:
+                        qq_name = display_nickname(cached_name[0], member)
                 db.execute("INSERT OR IGNORE INTO chat_sender_log VALUES(?,?,?,?,?)", (data["app_id"]+":"+data["group_openid"]+":"+event, data["group_openid"], data["member_openid"], nickname, time.time()))
                 binding = db.execute("SELECT * FROM bindings WHERE subject=?", (subject,)).fetchone()
                 custom_title = db.execute("SELECT title FROM chat_titles WHERE subject=? AND group_id=?", (subject, data["group_openid"])).fetchone()
-                payload = {"text": text, "source": "qq", "uuid": binding["game_uuid"] if binding else "",
-                           "name": binding["game_name"] if binding else (nickname or (cached_name[0] if cached_name else "群友")),
+                mention_enabled = chat_mentions.enabled(cfg, data["group_openid"])
+                relay_text = chat_mentions.INBOUND_AT.sub("@群成员", text) if mention_enabled else text
+                payload = {"text": relay_text, "source": "qq", "uuid": binding["game_uuid"] if binding else "",
+                           "name": group_nickname or (binding["game_name"] if binding else (qq_name or "群友")),
                            "group_name": cfg.get("chat_bridge", {}).get("group_aliases", {}).get(data["group_openid"]) or str(data.get("group_name", ""))[:128] or data["group_openid"],
                            "qq_id": data["member_openid"], "role": role, "title": custom_title[0] if custom_title else None, "media": attachments}
+                group = data["group_openid"]
+                mention_name = chat_mentions.label(group_nickname or qq_name) if mention_enabled else ""
+                if (mention_name
+                        and not chat_mentions.OPENID.search(mention_name) and chat_mentions.OPENID.fullmatch(member)):
+                    now = time.time()
+                    token = secrets.token_hex(8)
+                    db.execute("DELETE FROM chat_mention_refs WHERE expires<=?", (now,))
+                    db.execute("INSERT INTO chat_mention_refs VALUES(?,?,?,?,?)",
+                               (token, group, member, mention_name, now + chat_mentions.TTL))
+                    payload["mention_name"] = mention_name
+                    payload["mention_ref"] = token
                 if not servers():
                     raise ValueError("bridge disabled")
                 enqueue(db, "game", data["group_openid"] + ":" + event, payload)
@@ -118,11 +156,25 @@ def register(app, cfg, store, identity, resolve_media):
                 if console:
                     enqueue(db, "game", "console:" + event,
                             {"text": text, "source": "console", "uuid": "", "name": "Console", "group_name": "控制台", "role": "member"})
+                mentions_active = chat_mentions.configured(cfg)
+                reference = next(chat_mentions.REFERENCE.finditer(text), None) if mentions_active and not console else None
+                mention = db.execute("SELECT * FROM chat_mention_refs WHERE token=? AND expires>?",
+                                     (reference[1], time.time())).fetchone() if reference else None
+                if mention and text[:reference.start()].endswith("@" + mention["nickname"]):
+                    before = text[:reference.start() - len(mention["nickname"]) - 1]
+                    after = text[reference.end():]
+                else:
+                    mention = None
                 for group in ([target] if target else outbound_groups()):
                     nick = db.execute("SELECT nickname FROM chat_group_names WHERE subject=? AND group_id=?",
                                       (binding["subject"], group)).fetchone() if binding else None
-                    enqueue(db, "qq", group + ":" + event,
-                            {"group": group, "text": ("[Console]" if console else "[游戏内]") + (nick[0] if nick else name) + ":" + text})
+                    prefix = ("[Console]" if console else "[游戏内]") + (nick[0] if nick else name) + ":"
+                    body = prefix + text
+                    payload = {"group": group, "text": chat_mentions.plain(body) if mentions_active else body}
+                    if mention and group == mention["group_id"] and chat_mentions.enabled(cfg, group):
+                        payload["mention"] = {"member": mention["member_openid"], "expires": mention["expires"],
+                                              "before": prefix + before, "after": after}
+                    enqueue(db, "qq", group + ":" + event, payload)
         return web.json_response({"ok": True})
 
     async def poll(request):
@@ -133,7 +185,8 @@ def register(app, cfg, store, identity, resolve_media):
             snapshot = [{"group": r["group_id"], "member": r["subject"][len(cfg["app_id"])+1:], "title": r["title"]}
                         for r in db.execute("SELECT subject,group_id,title FROM chat_titles ORDER BY group_id,subject")
                         if r["group_id"] in groups() and r["subject"].startswith(cfg["app_id"] + ":")] if direction == "game" else []
-        return web.json_response({"messages": [dict(id=r["id"], **json.loads(r["payload"])) for r in rows], "title_snapshot": snapshot})
+        return web.json_response({"messages": [dict(id=r["id"], **json.loads(r["payload"])) for r in rows],
+                                  "title_snapshot": snapshot, "mentions_enabled": chat_mentions.configured(cfg)})
 
     async def ack(request):
         ids = (await request.json())["ids"]
